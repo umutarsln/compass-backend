@@ -1,0 +1,5 @@
+export enum SellableType {
+  PRODUCT = 'PRODUCT',
+  VARIANT_COMBINATION = 'VARIANT_COMBINATION',
+  BUNDLE = 'BUNDLE',
+}

@@ -47,6 +47,34 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'PATCH /uploads/:id': [Role.ADMIN], // Dosya bilgilerini güncelle
     'DELETE /uploads/:id': [Role.ADMIN], // Dosya sil
 
+    // Category Endpoints
+    'POST /categories': [Role.ADMIN], // Kategori oluştur
+    'GET /categories': [], // Public - herkes kategorileri görebilir
+    'GET /categories/tree': [], // Public - tree yapısını görebilir
+    'GET /categories/:id': [], // Public - kategori detayını görebilir
+    'PATCH /categories/:id': [Role.ADMIN], // Kategori güncelle
+    'DELETE /categories/:id': [Role.ADMIN], // Kategori sil
+
+    // Tag Endpoints
+    'POST /tags': [Role.ADMIN], // Tag oluştur
+    'GET /tags': [], // Public - herkes tag'leri görebilir
+    'GET /tags/:id': [], // Public - tag detayını görebilir
+    'PATCH /tags/:id': [Role.ADMIN], // Tag güncelle
+    'DELETE /tags/:id': [Role.ADMIN], // Tag sil
+
+    // Product Endpoints
+    'POST /products': [Role.ADMIN], // Ürün oluştur
+    'GET /products': [], // Public - herkes ürünleri görebilir
+    'GET /products/:id': [], // Public - ürün detayını görebilir
+    'PATCH /products/:id': [Role.ADMIN], // Ürün güncelle
+    'DELETE /products/:id': [Role.ADMIN], // Ürün sil
+
+    // Stock Endpoints
+    'GET /stock/:sellableType/:sellableId': [Role.ADMIN], // Stok bilgisi
+    'PATCH /stock/:sellableType/:sellableId': [Role.ADMIN], // Stok güncelle
+    'POST /stock/reserve': [Role.ADMIN], // Stok rezerve et
+    'POST /stock/release': [Role.ADMIN], // Stok serbest bırak
+
     // Gelecekte eklenecek endpoint'ler için örnekler:
     // 'GET /products': [], // Public
     // 'POST /products': [Role.ADMIN],
@@ -62,7 +90,7 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
  */
 export function normalizeEndpointPath(path: string): string {
     // Özel endpoint'leri koru (me, stats, profile, tree, recursive, download, vb.)
-    const specialPaths = ['/me', '/stats', '/profile', '/tree', '/recursive', '/download'];
+    const specialPaths = ['/me', '/stats', '/profile', '/tree', '/recursive', '/download', '/reserve', '/release'];
     const hasSpecialPath = specialPaths.some(sp => path.includes(sp));
 
     if (hasSpecialPath) {

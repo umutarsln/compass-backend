@@ -1,0 +1,130 @@
+{
+  "info": {
+    "name": "Category Module",
+    "description": "E-Ticaret Backend - Category Modülü API Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Category",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Elektronik\",\n  \"description\": \"Elektronik ürünler kategorisi\",\n  \"parentId\": null,\n  \"imageId\": null,\n  \"seoTitle\": \"Elektronik Ürünler\",\n  \"seoDescription\": \"Elektronik ürünler için kategori\",\n  \"seoKeywords\": [\"elektronik\", \"teknoloji\"],\n  \"isActive\": true,\n  \"displayOrder\": 0\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/categories",
+          "host": ["{{base_url}}"],
+          "path": ["categories"]
+        }
+      }
+    },
+    {
+      "name": "Get All Categories",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/categories",
+          "host": ["{{base_url}}"],
+          "path": ["categories"]
+        }
+      }
+    },
+    {
+      "name": "Get Categories Tree",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/categories/tree",
+          "host": ["{{base_url}}"],
+          "path": ["categories", "tree"]
+        }
+      }
+    },
+    {
+      "name": "Get Category by ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/categories/:id",
+          "host": ["{{base_url}}"],
+          "path": ["categories", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "uuid"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Update Category",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Güncellenmiş Kategori\",\n  \"description\": \"Yeni açıklama\",\n  \"isActive\": false\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/categories/:id",
+          "host": ["{{base_url}}"],
+          "path": ["categories", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "uuid"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Delete Category",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/categories/:id",
+          "host": ["{{base_url}}"],
+          "path": ["categories", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "uuid"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

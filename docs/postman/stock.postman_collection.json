@@ -1,0 +1,121 @@
+{
+  "info": {
+    "name": "Stock Module",
+    "description": "E-Ticaret Backend - Stock Modülü API Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Stock",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/stock/:sellableType/:sellableId",
+          "host": ["{{base_url}}"],
+          "path": ["stock", ":sellableType", ":sellableId"],
+          "variable": [
+            {
+              "key": "sellableType",
+              "value": "PRODUCT"
+            },
+            {
+              "key": "sellableId",
+              "value": "uuid"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Update Stock",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"availableQuantity\": 150,\n  \"lowStockThreshold\": 15\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/stock/:sellableType/:sellableId",
+          "host": ["{{base_url}}"],
+          "path": ["stock", ":sellableType", ":sellableId"],
+          "variable": [
+            {
+              "key": "sellableType",
+              "value": "PRODUCT"
+            },
+            {
+              "key": "sellableId",
+              "value": "uuid"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Reserve Stock",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sellableType\": \"PRODUCT\",\n  \"sellableId\": \"uuid\",\n  \"quantity\": 5\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/stock/reserve",
+          "host": ["{{base_url}}"],
+          "path": ["stock", "reserve"]
+        }
+      }
+    },
+    {
+      "name": "Release Stock",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sellableType\": \"PRODUCT\",\n  \"sellableId\": \"uuid\",\n  \"quantity\": 5\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/stock/release",
+          "host": ["{{base_url}}"],
+          "path": ["stock", "release"]
+        }
+      }
+    }
+  ]
+}

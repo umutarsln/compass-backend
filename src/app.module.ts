@@ -7,6 +7,10 @@ import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { FolderModule } from './folder/folder.module';
 import { UploadModule } from './upload/upload.module';
+import { CategoryModule } from './category/category.module';
+import { TagModule } from './tag/tag.module';
+import { StockModule } from './stock/stock.module';
+import { ProductModule } from './product/product.module';
 
 @Module({
   imports: [
@@ -32,6 +36,10 @@ import { UploadModule } from './upload/upload.module';
     AuthModule,
     FolderModule,
     UploadModule,
+    CategoryModule,
+    TagModule,
+    StockModule,
+    ProductModule,
   ],
   controllers: [AppController],
   providers: [AppService],

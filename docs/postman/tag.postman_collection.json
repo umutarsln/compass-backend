@@ -1,0 +1,118 @@
+{
+  "info": {
+    "name": "Tag Module",
+    "description": "E-Ticaret Backend - Tag Modülü API Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Tag",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Yeni Ürün\",\n  \"description\": \"Yeni ürünler için tag\",\n  \"color\": \"#FF5733\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/tags",
+          "host": ["{{base_url}}"],
+          "path": ["tags"]
+        }
+      }
+    },
+    {
+      "name": "Get All Tags",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/tags",
+          "host": ["{{base_url}}"],
+          "path": ["tags"]
+        }
+      }
+    },
+    {
+      "name": "Get Tag by ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/tags/:id",
+          "host": ["{{base_url}}"],
+          "path": ["tags", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "uuid"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Update Tag",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Güncellenmiş Tag\",\n  \"color\": \"#33FF57\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/tags/:id",
+          "host": ["{{base_url}}"],
+          "path": ["tags", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "uuid"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Delete Tag",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/tags/:id",
+          "host": ["{{base_url}}"],
+          "path": ["tags", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "uuid"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
