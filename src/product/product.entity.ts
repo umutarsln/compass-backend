@@ -37,7 +37,7 @@ export class Product {
   @Column('decimal', { precision: 10, scale: 2 })
   basePrice: number;
 
-  @Column({ unique: true, nullable: true })
+  @Column({ type: 'varchar', unique: true, nullable: true })
   sku: string | null;
 
   @Column({ default: true })

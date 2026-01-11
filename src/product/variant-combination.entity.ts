@@ -26,7 +26,7 @@ export class VariantCombination {
   @JoinColumn({ name: 'productId' })
   product: Product;
 
-  @Column({ unique: true, nullable: true })
+  @Column({ type: 'varchar', unique: true, nullable: true })
   sku: string | null;
 
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
