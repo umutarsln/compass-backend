@@ -29,6 +29,24 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'PATCH /users/:id': [Role.USER, Role.ADMIN], // Kullanıcı kendini, admin herkesi güncelleyebilir (auth gerekli)
     'DELETE /users/:id': [Role.ADMIN], // Sadece admin kullanıcı silebilir (auth gerekli)
 
+    // Folder Endpoints (Sadece ADMIN)
+    'POST /folders': [Role.ADMIN], // Klasör oluştur
+    'GET /folders': [Role.ADMIN], // Tüm klasörleri listele
+    'GET /folders/tree': [Role.ADMIN], // Klasörleri tree yapısında listele
+    'GET /folders/:id': [Role.ADMIN], // Klasör detayı
+    'PATCH /folders/:id': [Role.ADMIN], // Klasör güncelle
+    'DELETE /folders/:id': [Role.ADMIN], // Klasör sil
+    'DELETE /folders/:id/recursive': [Role.ADMIN], // Klasörü recursive sil
+
+    // Upload Endpoints (Sadece ADMIN)
+    'POST /uploads': [Role.ADMIN], // Dosya yükle
+    'GET /uploads': [Role.ADMIN], // Tüm dosyaları listele
+    'GET /uploads/folder/:id': [Role.ADMIN], // Klasördeki dosyaları listele
+    'GET /uploads/:id': [Role.ADMIN], // Dosya detayı
+    'GET /uploads/:id/download': [Role.ADMIN], // Dosya indirme URL'i
+    'PATCH /uploads/:id': [Role.ADMIN], // Dosya bilgilerini güncelle
+    'DELETE /uploads/:id': [Role.ADMIN], // Dosya sil
+
     // Gelecekte eklenecek endpoint'ler için örnekler:
     // 'GET /products': [], // Public
     // 'POST /products': [Role.ADMIN],
@@ -43,12 +61,15 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
  * Örnek: '/users/me' => '/users/me' (değişmez)
  */
 export function normalizeEndpointPath(path: string): string {
-    // Özel endpoint'leri koru (me, stats, vb.)
-    const specialPaths = ['/me', '/stats', '/profile'];
+    // Özel endpoint'leri koru (me, stats, profile, tree, recursive, download, vb.)
+    const specialPaths = ['/me', '/stats', '/profile', '/tree', '/recursive', '/download'];
     const hasSpecialPath = specialPaths.some(sp => path.includes(sp));
 
     if (hasSpecialPath) {
-        return path; // Özel path'leri olduğu gibi bırak
+        // Özel path'leri olduğu gibi bırak, ama ID'leri normalize et
+        // Örnek: /folders/123/tree => /folders/:id/tree
+        return path.replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '/:id')
+            .replace(/\/\d+/g, '/:id');
     }
 
     // UUID veya sayısal ID'leri :id ile değiştir
