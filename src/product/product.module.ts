@@ -8,6 +8,8 @@ import { BundleItem } from './bundle-item.entity';
 import { ProductGallery } from './product-gallery.entity';
 import { ProductService } from './product.service';
 import { ProductController } from './product.controller';
+import { StoreProductService } from './store-product.service';
+import { StoreProductController } from './store-product.controller';
 import { Category } from '../category/category.entity';
 import { Tag } from '../tag/tag.entity';
 import { Upload } from '../upload/upload.entity';
@@ -30,8 +32,8 @@ import { StockModule } from '../stock/stock.module';
     ]),
     StockModule,
   ],
-  controllers: [ProductController],
-  providers: [ProductService],
-  exports: [ProductService],
+  controllers: [ProductController, StoreProductController],
+  providers: [ProductService, StoreProductService],
+  exports: [ProductService, StoreProductService],
 })
 export class ProductModule {}

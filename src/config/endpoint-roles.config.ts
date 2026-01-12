@@ -115,6 +115,9 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'POST /stock/reserve': [Role.ADMIN], // Stok rezerve et
     'POST /stock/release': [Role.ADMIN], // Stok serbest bırak
 
+    // Store Endpoints (Public - Authentication gerektirmez)
+    'GET /store/products': [], // Public - Mağaza için ürün listesi (basit ürünler ve varyasyon kombinasyonları)
+
     // Gelecekte eklenecek endpoint'ler için örnekler:
     // 'GET /products': [], // Public
     // 'POST /products': [Role.ADMIN],
