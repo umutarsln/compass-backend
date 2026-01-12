@@ -7,11 +7,13 @@ import {
   ManyToOne,
   ManyToMany,
   OneToOne,
+  OneToMany,
   JoinColumn,
   JoinTable,
 } from 'typeorm';
 import { Product } from './product.entity';
 import { VariantValue } from './variant-value.entity';
+import { ProductGallery } from './product-gallery.entity';
 import { Stock } from '../stock/stock.entity';
 
 @Entity('variant_combinations')
@@ -29,11 +31,11 @@ export class VariantCombination {
   @Column({ type: 'varchar', unique: true, nullable: true })
   sku: string | null;
 
-  @Column('decimal', { precision: 10, scale: 2, nullable: true })
-  priceOverride: number | null; // Varsa basePrice'ı override eder
-
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ default: false })
+  isDisabled: boolean; // Bu kombinasyon disabled mı? (örneğin: plastik + kırmızı = disabled)
 
   @ManyToMany(() => VariantValue, (value) => value.combinations)
   @JoinTable({
@@ -42,6 +44,12 @@ export class VariantCombination {
     inverseJoinColumn: { name: 'variantValueId', referencedColumnName: 'id' },
   })
   variantValues: VariantValue[];
+
+  @OneToMany(() => ProductGallery, (gallery) => gallery.variantCombination)
+  galleries: ProductGallery[];
+
+  @OneToOne(() => Stock, (stock) => stock.variantCombination)
+  stock: Stock | null;
 
   @CreateDateColumn()
   createdAt: Date;

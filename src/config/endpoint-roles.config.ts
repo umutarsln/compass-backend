@@ -74,9 +74,40 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     // Product Endpoints
     'POST /products': [Role.ADMIN], // Ürün oluştur
     'GET /products': [], // Public - herkes ürünleri görebilir
+    'GET /products/slug/:slug': [], // Public - slug ile ürün detayını görebilir
     'GET /products/:id': [], // Public - ürün detayını görebilir
     'PATCH /products/:id': [Role.ADMIN], // Ürün güncelle
     'DELETE /products/:id': [Role.ADMIN], // Ürün sil
+    'POST /products/reset': [Role.ADMIN], // Tüm ürün verilerini temizle (SADECE ADMIN)
+
+    // Variant Option Endpoints
+    'POST /products/:id/variant-options': [Role.ADMIN], // Varyasyon seçeneği oluştur
+    'GET /products/:id/variant-options': [Role.ADMIN], // Ürünün varyasyon seçeneklerini getir
+    'PATCH /products/variant-options/:id': [Role.ADMIN], // Varyasyon seçeneğini güncelle
+    'DELETE /products/variant-options/:id': [Role.ADMIN], // Varyasyon seçeneğini sil
+
+    // Variant Value Endpoints
+    'POST /products/variant-options/:id/variant-values': [Role.ADMIN], // Varyasyon değeri oluştur
+    'GET /products/variant-options/:id/variant-values': [Role.ADMIN], // Varyasyon seçeneğinin değerlerini getir
+    'PATCH /products/variant-values/:id': [Role.ADMIN], // Varyasyon değerini güncelle
+    'DELETE /products/variant-values/:id': [Role.ADMIN], // Varyasyon değerini sil
+
+    // Variant Combination Endpoints
+    'POST /products/:id/variant-combinations/generate': [Role.ADMIN], // Tüm kombinasyonları otomatik oluştur
+    'GET /products/:id/variant-combinations': [Role.ADMIN], // Ürünün kombinasyonlarını getir
+    'GET /products/:id/variant-combinations/total-stock': [Role.ADMIN], // Ürünün toplam stokunu hesapla
+    'POST /products/:id/variant-combinations': [Role.ADMIN], // Varyasyon kombinasyonu oluştur
+    'PATCH /products/variant-combinations/:id': [Role.ADMIN], // Varyasyon kombinasyonunu güncelle
+    // Not: DELETE endpoint kaldırıldı - kombinasyonlar silinemez
+
+    // Product Gallery Endpoints
+    'POST /products/:id/gallery': [Role.ADMIN], // Ürün için ProductGallery oluştur
+    'POST /products/variants/:id/gallery': [Role.ADMIN], // Varyasyon kombinasyonu için ProductGallery oluştur
+    'GET /products/:id/gallery': [Role.ADMIN], // Ürünün ProductGallery'sini getir
+    'GET /products/variants/:id/gallery': [Role.ADMIN], // Varyasyon kombinasyonunun ProductGallery'sini getir
+    'GET /products/gallery/:id': [Role.ADMIN], // ProductGallery detayını getir
+    'PATCH /products/gallery/:id': [Role.ADMIN], // ProductGallery güncelle
+    'DELETE /products/gallery/:id': [Role.ADMIN], // ProductGallery sil
 
     // Stock Endpoints
     'GET /stock/:sellableType/:sellableId': [Role.ADMIN], // Stok bilgisi

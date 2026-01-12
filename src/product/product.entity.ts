@@ -6,6 +6,8 @@ import {
   UpdateDateColumn,
   ManyToOne,
   ManyToMany,
+  OneToMany,
+  OneToOne,
   JoinTable,
   JoinColumn,
 } from 'typeorm';
@@ -13,6 +15,8 @@ import { ProductType } from '../common/enums/product-type.enum';
 import { User } from '../user/user.entity';
 import { Category } from '../category/category.entity';
 import { Tag } from '../tag/tag.entity';
+import { ProductGallery } from './product-gallery.entity';
+import { Stock } from '../stock/stock.entity';
 
 @Entity('products')
 export class Product {
@@ -83,6 +87,12 @@ export class Product {
     inverseJoinColumn: { name: 'tagId', referencedColumnName: 'id' },
   })
   tags: Tag[];
+
+  @OneToMany(() => ProductGallery, (gallery) => gallery.product)
+  galleries: ProductGallery[];
+
+  @OneToOne(() => Stock, (stock) => stock.product)
+  stock: Stock | null;
 
   @CreateDateColumn()
   createdAt: Date;

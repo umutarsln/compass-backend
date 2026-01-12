@@ -10,6 +10,8 @@ import { ProductService } from './product.service';
 import { ProductController } from './product.controller';
 import { Category } from '../category/category.entity';
 import { Tag } from '../tag/tag.entity';
+import { Upload } from '../upload/upload.entity';
+import { Stock } from '../stock/stock.entity';
 import { StockModule } from '../stock/stock.module';
 
 @Module({
@@ -23,6 +25,8 @@ import { StockModule } from '../stock/stock.module';
       ProductGallery,
       Category,
       Tag,
+      Upload,
+      Stock,
     ]),
     StockModule,
   ],

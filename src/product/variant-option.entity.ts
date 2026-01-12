@@ -25,6 +25,13 @@ export class VariantOption {
   @Column()
   name: string; // Örn: "Color", "Size"
 
+  @Column({
+    type: 'enum',
+    enum: ['COLOR', 'TEXT'],
+    default: 'TEXT',
+  })
+  type: 'COLOR' | 'TEXT'; // Varyasyon tipi: Renk veya Yazı Tipi
+
   @Column({ type: 'int', default: 0 })
   displayOrder: number;
 

@@ -27,12 +27,25 @@ export class StockService {
   ): Promise<Stock> {
     let stock = await this.stockRepository.findOne({
       where: { sellableType, sellableId },
+      relations: ['product', 'variantCombination'],
     });
 
     if (!stock) {
+      // Product veya VariantCombination relation'ını set et
+      let productId: string | null = null;
+      let variantCombinationId: string | null = null;
+
+      if (sellableType === SellableType.PRODUCT) {
+        productId = sellableId;
+      } else if (sellableType === SellableType.VARIANT_COMBINATION) {
+        variantCombinationId = sellableId;
+      }
+
       stock = this.stockRepository.create({
         sellableType,
         sellableId,
+        productId,
+        variantCombinationId,
         availableQuantity: 0,
         reservedQuantity: 0,
       });

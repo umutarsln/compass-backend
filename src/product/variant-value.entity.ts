@@ -28,6 +28,9 @@ export class VariantValue {
   @Column()
   value: string; // Örn: "Red", "Large"
 
+  @Column({ type: 'varchar', nullable: true })
+  colorCode: string | null; // Renk kodu (hex format: #FF0000) - sadece COLOR tipinde kullanılır
+
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   priceDelta: number; // Fiyat farkı
 
