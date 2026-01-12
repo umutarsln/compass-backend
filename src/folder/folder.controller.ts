@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Request,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -24,7 +25,9 @@ import { Folder } from './folder.entity';
 @Controller('folders')
 @ApiBearerAuth('JWT-auth')
 export class FolderController {
-  constructor(private readonly folderService: FolderService) {}
+  private readonly logger = new Logger(FolderController.name);
+
+  constructor(private readonly folderService: FolderService) { }
 
   @Post()
   @ApiOperation({ summary: 'Yeni klasör oluştur' })
@@ -77,6 +80,24 @@ export class FolderController {
     return await this.folderService.findOne(id);
   }
 
+  @Get(':id/total-size')
+  @ApiOperation({ summary: 'Klasör ve alt klasörlerindeki toplam dosya boyutunu hesapla (MB)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Toplam dosya boyutu başarıyla hesaplandı',
+    schema: {
+      type: 'object',
+      properties: {
+        totalSizeMB: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Klasör bulunamadı' })
+  async getTotalSize(@Param('id') id: string): Promise<{ totalSizeMB: number }> {
+    const totalSizeMB = await this.folderService.calculateTotalSize(id);
+    return { totalSizeMB };
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Klasör bilgilerini güncelle' })
   @ApiBody({ type: UpdateFolderDto })
@@ -90,8 +111,29 @@ export class FolderController {
   async update(
     @Param('id') id: string,
     @Body() updateFolderDto: UpdateFolderDto,
+    @Request() req: any,
   ): Promise<Folder> {
-    return await this.folderService.update(id, updateFolderDto);
+    const userId = req.user?.userId || 'unknown';
+    this.logger.log(
+      `[PATCH /folders/:id] İstek alındı - Folder ID: ${id}, User ID: ${userId}`,
+    );
+    this.logger.debug(
+      `[PATCH /folders/:id] Request Body: ${JSON.stringify(updateFolderDto)}`,
+    );
+
+    try {
+      const result = await this.folderService.update(id, updateFolderDto);
+      this.logger.log(
+        `[PATCH /folders/:id] Başarılı - Folder ID: ${id}, Name: ${result.name}`,
+      );
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[PATCH /folders/:id] Hata - Folder ID: ${id}, Error: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 
   @Delete(':id')

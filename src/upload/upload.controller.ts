@@ -167,6 +167,36 @@ export class UploadController {
     return await this.uploadService.update(id, updateUploadDto);
   }
 
+  @Get(':id/relations')
+  @ApiOperation({ summary: 'Dosyanın kullanıldığı relation\'ları kontrol et' })
+  @ApiResponse({
+    status: 200,
+    description: 'Relation bilgileri başarıyla döndürüldü',
+    schema: {
+      type: 'object',
+      properties: {
+        hasRelations: { type: 'boolean' },
+        relations: {
+          type: 'object',
+          properties: {
+            productGalleries: { type: 'number' },
+            categories: { type: 'number' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Dosya bulunamadı' })
+  async checkRelations(@Param('id') id: string): Promise<{
+    hasRelations: boolean;
+    relations: {
+      productGalleries: number;
+      categories: number;
+    };
+  }> {
+    return await this.uploadService.checkRelations(id);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Dosyayı sil (S3\'ten de silinir)' })
   @ApiResponse({
@@ -174,7 +204,16 @@ export class UploadController {
     description: 'Dosya başarıyla silindi',
   })
   @ApiResponse({ status: 404, description: 'Dosya bulunamadı' })
+  @ApiResponse({ status: 409, description: 'Dosya kullanılıyor, silinemez' })
   async remove(@Param('id') id: string): Promise<{ message: string }> {
+    // Relation kontrolü
+    const relations = await this.uploadService.checkRelations(id);
+    if (relations.hasRelations) {
+      throw new BadRequestException(
+        'Bu dosya kullanılıyor ve silinemez. Önce ilgili ürün veya kategori ilişkilerini kaldırın.',
+      );
+    }
+
     await this.uploadService.remove(id);
     return { message: 'Dosya başarıyla silindi' };
   }

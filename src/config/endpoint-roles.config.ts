@@ -29,6 +29,15 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'PATCH /users/:id': [Role.USER, Role.ADMIN], // Kullanıcı kendini, admin herkesi güncelleyebilir (auth gerekli)
     'DELETE /users/:id': [Role.ADMIN], // Sadece admin kullanıcı silebilir (auth gerekli)
 
+    // Admin Management Endpoints (Sadece ADMIN)
+    'GET /users/admins': [Role.ADMIN], // Admin listesi
+    'POST /users/admins': [Role.ADMIN], // Admin oluştur
+    'PATCH /users/admins/:id': [Role.ADMIN], // Admin güncelle
+    'DELETE /users/admins/:id': [Role.ADMIN], // Admin sil
+
+    // Customer Endpoints (Sadece ADMIN)
+    'GET /users/customers': [Role.ADMIN], // Müşteri listesi
+
     // Folder Endpoints (Sadece ADMIN)
     'POST /folders': [Role.ADMIN], // Klasör oluştur
     'GET /folders': [Role.ADMIN], // Tüm klasörleri listele

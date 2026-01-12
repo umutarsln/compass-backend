@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { Upload } from './upload.entity';
@@ -26,6 +26,7 @@ export class UploadService {
     private folderRepository: Repository<Folder>,
     private s3Service: S3Service,
     private configService: ConfigService,
+    private dataSource: DataSource,
   ) {
     // Env'den dosya boyutu limitini al (default: 10MB)
     this.maxFileSize =
@@ -37,7 +38,12 @@ export class UploadService {
     const allowedTypes =
       this.configService.get('ALLOWED_FILE_TYPES') ||
       'image/jpeg,image/png,image/gif,image/webp,application/pdf';
-    this.allowedMimeTypes = allowedTypes.split(',');
+    // Eğer "*" veya boş ise tüm dosya tiplerine izin ver
+    if (allowedTypes === '*' || allowedTypes === '' || !allowedTypes) {
+      this.allowedMimeTypes = [];
+    } else {
+      this.allowedMimeTypes = allowedTypes.split(',').map(type => type.trim());
+    }
   }
 
   /**
@@ -80,8 +86,8 @@ export class UploadService {
       );
     }
 
-    // MIME type kontrolü
-    if (!this.allowedMimeTypes.includes(file.mimetype)) {
+    // MIME type kontrolü (eğer allowedMimeTypes boş ise tüm tiplere izin ver)
+    if (this.allowedMimeTypes.length > 0 && !this.allowedMimeTypes.includes(file.mimetype)) {
       throw new BadRequestException(
         `Bu dosya tipi desteklenmiyor. İzin verilen tipler: ${this.allowedMimeTypes.join(', ')}`,
       );
@@ -244,5 +250,55 @@ export class UploadService {
     return await this.uploadRepository.findOne({
       where: { hash },
     });
+  }
+
+  /**
+   * Upload'ın kullanıldığı relation'ları kontrol eder
+   */
+  async checkRelations(id: string): Promise<{
+    hasRelations: boolean;
+    relations: {
+      productGalleries: number;
+      categories: number;
+    };
+  }> {
+    const upload = await this.findOne(id);
+
+    // ProductGallery'lerde mainImage veya thumbnailImage olarak kullanılıyor mu?
+    // TypeORM snake_case kullanır, bu yüzden main_image_id ve thumbnail_image_id
+    const mainThumbnailCount = await this.dataSource
+      .query(
+        `SELECT COUNT(*) as count FROM product_galleries 
+         WHERE "mainImageId" = $1 OR "thumbnailImageId" = $1`,
+        [id],
+      )
+      .then((result) => parseInt(result[0]?.count || '0', 10));
+
+    // ProductGallery detailImages'da kullanılıyor mu?
+    // Join table'da kolon adları genellikle camelCase olarak saklanır
+    const detailImagesCount = await this.dataSource
+      .query(
+        `SELECT COUNT(*) as count FROM product_gallery_detail_images 
+         WHERE "uploadId" = $1`,
+        [id],
+      )
+      .then((result) => parseInt(result[0]?.count || '0', 10));
+
+    const productGalleriesCount = mainThumbnailCount + detailImagesCount;
+
+    // Category'lerde kullanılıyor mu?
+    const categoriesCount = await this.dataSource
+      .query(`SELECT COUNT(*) as count FROM categories WHERE "imageId" = $1`, [id])
+      .then((result) => parseInt(result[0]?.count || '0', 10));
+
+    const hasRelations = productGalleriesCount > 0 || categoriesCount > 0;
+
+    return {
+      hasRelations,
+      relations: {
+        productGalleries: productGalleriesCount,
+        categories: categoriesCount,
+      },
+    };
   }
 }

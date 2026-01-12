@@ -6,6 +6,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  CopyObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -84,5 +85,25 @@ export class S3Service {
     } catch (error) {
       return false;
     }
+  }
+
+  /**
+   * S3'teki dosyayı taşır (copy + delete)
+   */
+  async moveFile(oldKey: string, newKey: string): Promise<string> {
+    // Önce dosyayı yeni konuma kopyala
+    const copyCommand = new CopyObjectCommand({
+      Bucket: this.bucket,
+      CopySource: `${this.bucket}/${oldKey}`,
+      Key: newKey,
+    });
+
+    await this.s3Client.send(copyCommand);
+
+    // Sonra eski dosyayı sil
+    await this.deleteFile(oldKey);
+
+    // Yeni URL'i döndür
+    return this.getFileUrl(newKey);
   }
 }

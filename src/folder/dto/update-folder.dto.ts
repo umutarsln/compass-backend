@@ -1,9 +1,7 @@
-import { PartialType } from '@nestjs/mapped-types';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID } from 'class-validator';
-import { CreateFolderDto } from './create-folder.dto';
+import { IsOptional, IsString, IsUUID, ValidateIf } from 'class-validator';
 
-export class UpdateFolderDto extends PartialType(CreateFolderDto) {
+export class UpdateFolderDto {
   @ApiProperty({
     description: 'Klasör adı',
     example: 'Güncellenmiş Klasör Adı',
@@ -23,11 +21,13 @@ export class UpdateFolderDto extends PartialType(CreateFolderDto) {
   description?: string;
 
   @ApiProperty({
-    description: 'Üst klasör ID',
+    description: 'Üst klasör ID (null ise ana dizine taşınır)',
     example: '123e4567-e89b-12d3-a456-426614174000',
     required: false,
+    nullable: true,
   })
   @IsOptional()
+  @ValidateIf((o) => o.parentId !== null && o.parentId !== undefined)
   @IsUUID()
-  parentId?: string;
+  parentId?: string | null;
 }
