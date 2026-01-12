@@ -11,6 +11,7 @@ import { RegisterDto } from '../user/dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { User } from '../user/user.entity';
+import { Role } from '../common/enums/role.enum';
 
 @Injectable()
 export class AuthService {
@@ -18,7 +19,7 @@ export class AuthService {
     private userService: UserService,
     private jwtService: JwtService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   async register(registerDto: RegisterDto): Promise<{
     user: Omit<User, 'password'>;
@@ -50,6 +51,13 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Email veya şifre hatalı');
     }
+
+    // Sadece ADMIN rolüne sahip kullanıcılar giriş yapabilir
+    const isAdmin = user.roles && user.roles.includes(Role.ADMIN);
+    if (!isAdmin) {
+      throw new UnauthorizedException('Bu panele sadece admin kullanıcılar giriş yapabilir');
+    }
+
     const tokens = await this.generateTokens(user);
     const { password, roles, ...userWithoutPasswordAndRoles } = user;
     return {
