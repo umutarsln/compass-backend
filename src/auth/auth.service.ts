@@ -43,7 +43,7 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto): Promise<{
-    user: Omit<User, 'password' | 'roles'>;
+    user: Omit<User, 'password'>;
     accessToken: string;
     refreshToken: string;
   }> {
@@ -59,9 +59,9 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokens(user);
-    const { password, roles, ...userWithoutPasswordAndRoles } = user;
+    const { password, ...userWithoutPassword } = user;
     return {
-      user: userWithoutPasswordAndRoles,
+      user: userWithoutPassword,
       ...tokens,
     };
   }

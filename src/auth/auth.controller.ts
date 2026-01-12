@@ -23,7 +23,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
@@ -82,6 +82,7 @@ export class AuthController {
             lastname: { type: 'string' },
             email: { type: 'string' },
             phone: { type: 'string' },
+            roles: { type: 'array', items: { type: 'string', enum: ['USER', 'ADMIN'] } },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
           },
@@ -95,7 +96,7 @@ export class AuthController {
   async login(
     @Body() loginDto: LoginDto,
   ): Promise<{
-    user: Omit<User, 'password' | 'roles'>;
+    user: Omit<User, 'password'>;
     accessToken: string;
     refreshToken: string;
   }> {
