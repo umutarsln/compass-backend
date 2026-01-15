@@ -33,10 +33,10 @@ Mağaza için ürünleri getirir. Basit ürünler ve varyasyonlu ürünlerin akt
 | Parametre | Tip | Zorunlu | Açıklama |
 |-----------|-----|---------|----------|
 | `search` | string | Hayır | Arama terimi (ürün adı, açıklama) |
-| `categoryId` | string | Hayır | Kategori ID filtresi |
-| `tagIds` | string | Hayır | Tag ID filtresi (virgülle ayrılmış: `id1,id2,id3`) |
-| `minPrice` | number | Hayır | Minimum fiyat filtresi |
-| `maxPrice` | number | Hayır | Maksimum fiyat filtresi |
+| `categorySlugs` | string | Hayır | Kategori slug filtreleri (virgülle ayrılmış: `slug1,slug2,slug3`) |
+| `tagSlugs` | string | Hayır | Tag slug filtreleri (virgülle ayrılmış: `slug1,slug2,slug3`) |
+| `minPrice` | number | Hayır | Minimum fiyat filtresi (final fiyat üzerinden) |
+| `maxPrice` | number | Hayır | Maksimum fiyat filtresi (final fiyat üzerinden) |
 | `orderBy` | enum | Hayır | Sıralama (varsayılan: `created_at_desc`) |
 | `page` | number | Hayır | Sayfa numarası (varsayılan: 1) |
 | `limit` | number | Hayır | Sayfa başına kayıt sayısı (varsayılan: 20, max: 100) |
@@ -54,14 +54,25 @@ Mağaza için ürünleri getirir. Basit ürünler ve varyasyonlu ürünlerin akt
 
 1. **Varyasyon Kombinasyonları**: Varyasyonlu ürünlerde, her aktif ve seçilebilir kombinasyon ayrı bir ürün olarak listelenir. Örneğin, "Kırmızı-L" ve "Mavi-M" kombinasyonları iki ayrı ürün olarak görünür.
 
-2. **Fiyat Hesaplama**: 
-   - Basit ürünler için: Eğer `discountedPrice` varsa onu kullan, yoksa `basePrice` kullanılır
-   - Varyasyon kombinasyonları için: `discountedPrice` varsa basePrice yerine onu kullan, sonra `sum(priceDelta'lar)` eklenir
-   - Fiyat filtresi, final fiyatlar üzerinden çalışır.
+2. **Kategori ve Tag Filtreleme**: 
+   - Kategori ve tag filtreleme **slug** bazlıdır (ID değil).
+   - Birden fazla kategori/tag seçilebilir (virgülle ayrılmış).
+   - Bir kategori seçildiğinde, tüm parent ve child kategorileri de otomatik olarak filtreye dahil edilir.
 
-3. **Stok Sıralaması**: Stokta olmayan ürünler (usableQuantity = 0) her zaman en sonda gelir, diğer sıralama kriterlerinden bağımsız olarak.
+3. **Fiyat Hesaplama**: 
+   - **Basit ürünler için**: 
+     - `price`: Eğer `discountedPrice` varsa onu kullan, yoksa `basePrice` kullanılır
+     - `basePrice`: Ürünün base fiyatı
+     - `discountedPrice`: İndirimli fiyat (varsa)
+   - **Varyasyon kombinasyonları için**: 
+     - `price`: `(discountedPrice + priceDelta'lar)` veya `(basePrice + priceDelta'lar)`
+     - `basePrice`: `basePrice + priceDelta'lar` (priceDelta'lar eklenmiş)
+     - `discountedPrice`: `discountedPrice + priceDelta'lar` (varsa, priceDelta'lar eklenmiş)
+   - Fiyat filtresi (`minPrice`, `maxPrice`), final fiyatlar (`price`) üzerinden çalışır.
 
-4. **Pagination**: Sonuçlar pagination ile döner. `total`, `page`, `limit`, `totalPages` bilgileri response'da bulunur.
+4. **Stok Sıralaması**: Stokta olmayan ürünler (usableQuantity = 0) her zaman en sonda gelir, diğer sıralama kriterlerinden bağımsız olarak.
+
+5. **Pagination**: Sonuçlar pagination ile döner. `total`, `page`, `limit`, `totalPages` bilgileri response'da bulunur.
 
 #### Response Örneği
 
@@ -73,6 +84,7 @@ Mağaza için ürünleri getirir. Basit ürünler ve varyasyonlu ürünlerin akt
       "productId": "uuid",
       "variantCombinationId": null,
       "name": "Ürün Adı",
+      "subtitle": "Ürün alt başlığı",
       "slug": "urun-adi",
       "description": "Ürün açıklaması",
       "price": 80.00,
@@ -149,11 +161,12 @@ Mağaza için ürünleri getirir. Basit ürünler ve varyasyonlu ürünlerin akt
 {
   "productId": "uuid",
   "name": "Basit Ürün",
+  "subtitle": "Ürün alt başlığı",
   "slug": "basit-urun",
   "description": "...",
   "basePrice": 100.00,
   "isOnSale": true,
-      "discountedPrice": 80.00,
+  "discountedPrice": 80.00,
   "type": "SIMPLE",
   "price": 80.00,
   "sku": "SKU-001",
@@ -178,11 +191,12 @@ Mağaza için ürünleri getirir. Basit ürünler ve varyasyonlu ürünlerin akt
 {
   "productId": "uuid",
   "name": "Varyasyonlu Ürün",
+  "subtitle": "Ürün alt başlığı",
   "slug": "varyasyonlu-urun",
   "description": "...",
   "basePrice": 100.00,
   "isOnSale": true,
-      "discountedPrice": 80.00,
+  "discountedPrice": 80.00,
   "type": "VARIANT",
   "price": null,
   "sku": null,
@@ -215,7 +229,9 @@ Mağaza için ürünleri getirir. Basit ürünler ve varyasyonlu ürünlerin akt
       "sku": "SKU-001",
       "isActive": true,
       "isDisabled": false,
-      "price": 88.00,
+      "price": 95.00,
+      "basePrice": 110.00,
+      "discountedPrice": 95.00,
       "stock": { ... },
       "gallery": { ... },
       "variantValues": [ ... ]
@@ -306,30 +322,50 @@ Tag'leri renkleriyle birlikte getirir.
 
 ```
 if (isOnSale && discountedPrice != null) {
-  finalPrice = discountedPrice
+  price = discountedPrice
 } else {
-  finalPrice = basePrice
+  price = basePrice
 }
 ```
 
 **Örnek:**
 - `basePrice = 100`
 - `discountedPrice = 80` (isOnSale = true)
-- `finalPrice = 80`
+- `price = 80`
+- `basePrice = 100` (değişmez)
+- `discountedPrice = 80` (değişmez)
 
 ### Varyasyon Kombinasyonları
 
+**Önemli**: Varyasyon kombinasyonlarında `priceDelta`'lar hem `basePrice` hem de `discountedPrice`'a eklenir.
+
 ```
-startingPrice = discountedPrice ?? basePrice
-finalPrice = startingPrice + sum(priceDelta'lar)
+totalPriceDelta = sum(variantValues.priceDelta)
+
+// basePrice hesaplama
+basePrice = product.basePrice + totalPriceDelta
+
+// discountedPrice hesaplama (varsa)
+discountedPrice = product.discountedPrice + totalPriceDelta
+
+// Final price hesaplama
+if (isOnSale && discountedPrice != null) {
+  price = discountedPrice  // (zaten priceDelta'lar eklenmiş)
+} else {
+  price = basePrice  // (zaten priceDelta'lar eklenmiş)
+}
 ```
 
 **Örnek:**
-- `basePrice = 100`
-- `discountedPrice = 80` (isOnSale = true)
+- `product.basePrice = 100`
+- `product.discountedPrice = 80` (isOnSale = true)
 - `priceDelta'lar = [10, 5]` (toplam: 15)
-- `startingPrice = 80` (discountedPrice kullanıldı)
-- `finalPrice = 80 + 15 = 95`
+- **Sonuç:**
+  - `basePrice = 100 + 15 = 115`
+  - `discountedPrice = 80 + 15 = 95`
+  - `price = 95` (discountedPrice kullanıldı)
+
+**Not**: API'den dönen tüm fiyatlar (`price`, `basePrice`, `discountedPrice`) `priceDelta`'lar eklenmiş halde gelir.
 
 ---
 
@@ -429,6 +465,15 @@ Boş array (`[]`) = Public endpoint, kimlik doğrulama gerektirmez.
 ---
 
 ## Güncelleme Notları
+
+### 2024-01-XX - Slug Bazlı Filtreleme ve Fiyat Hesaplama Güncellemesi
+- Kategori ve tag filtreleme slug bazlı hale getirildi (`categorySlugs`, `tagSlugs`)
+- Hiyerarşik kategori filtreleme eklendi (parent/child otomatik dahil)
+- Varyasyon kombinasyonları için fiyat hesaplama güncellendi:
+  - `basePrice` ve `discountedPrice`'a `priceDelta`'lar eklendi
+  - API'den dönen tüm fiyatlar `priceDelta`'lar eklenmiş halde
+- `subtitle` alanı ürünlere eklendi
+- `StoreVariantCombinationDto`'ya `basePrice` ve `discountedPrice` alanları eklendi
 
 ### 2024-01-XX - İlk Versiyon
 - Store modülü oluşturuldu

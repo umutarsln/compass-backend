@@ -85,20 +85,24 @@ export class ProductService {
    * Ürün fiyatını hesaplar
    */
   calculatePrice(product: Product, variantValueIds?: string[]): number {
-    let price = product.basePrice;
+    // Base price'ı al
+    let baseOrDiscountedPrice = Number(product.basePrice);
 
-    // Discount uygula - eğer discountedPrice varsa onu kullan
+    // Discount uygula - eğer discountedPrice varsa onu kullan (sadece basePrice yerine)
     if (product.isOnSale && product.discountedPrice != null) {
-      price = Number(product.discountedPrice);
+      const discountedPrice = Number(product.discountedPrice);
+      if (!isNaN(discountedPrice) && discountedPrice >= 0) {
+        baseOrDiscountedPrice = discountedPrice;
+      }
     }
 
     // Variant product ise ve variant values verilmişse
     if (product.type === ProductType.VARIANT && variantValueIds) {
-      // Variant value'ların priceDelta'larını ekle
-      // Bu kısım VariantService'ten alınacak, şimdilik basePrice döndürüyoruz
+      // Variant value'ların priceDelta'larını ekle (her zaman basePrice üzerine)
+      // Bu kısım VariantService'ten alınacak, şimdilik baseOrDiscountedPrice döndürüyoruz
     }
 
-    return parseFloat(price.toFixed(2));
+    return parseFloat(baseOrDiscountedPrice.toFixed(2));
   }
 
   async create(
@@ -278,9 +282,9 @@ export class ProductService {
     // Diğer alanları güncelle
     // discountedPrice'ı özel olarak işle - sadece açıkça gönderildiğinde güncelle
     const { discountedPrice, categoryIds, tagIds, ...restUpdateData } = updateProductDto;
-    
+
     Object.assign(product, restUpdateData);
-    
+
     // discountedPrice açıkça gönderildiyse (null dahil) güncelle
     if (discountedPrice !== undefined) {
       product.discountedPrice = discountedPrice;
@@ -484,7 +488,6 @@ export class ProductService {
         'thumbnailImage',
         'detailImages',
       ],
-      cache: false, // Cache'i devre dışı bırak
     });
   }
 
@@ -715,12 +718,7 @@ export class ProductService {
       thumbnailImageId: savedGallery.thumbnailImageId,
     });
 
-    // Entity Manager'ı refresh et - cache sorununu çözmek için
-    await this.productGalleryRepository.manager.connection.queryResultCache?.clear();
-
-    // Relation'ları yükle - Query Builder kullanarak cache'i bypass et
-    console.log('[ProductService] Loading relations with QueryBuilder...');
-
+    // Relation'ları yükle
     const galleryWithRelations = await this.productGalleryRepository
       .createQueryBuilder('gallery')
       .where('gallery.id = :id', { id: savedGallery.id })
@@ -729,7 +727,6 @@ export class ProductService {
       .leftJoinAndSelect('gallery.mainImage', 'mainImage')
       .leftJoinAndSelect('gallery.thumbnailImage', 'thumbnailImage')
       .leftJoinAndSelect('gallery.detailImages', 'detailImages')
-      .cache(false) // Cache'i devre dışı bırak
       .getOne();
 
     if (!galleryWithRelations) {
@@ -753,7 +750,6 @@ export class ProductService {
     });
 
     // Eğer relation'lar hala eski değerleri gösteriyorsa, manuel olarak düzelt
-    // (TypeORM cache sorunu için fallback)
     if (galleryWithRelations.mainImageId !== savedGallery.mainImageId) {
       console.warn('[ProductService] WARNING: mainImageId mismatch after reload, fixing manually...');
       console.warn('[ProductService] Expected:', savedGallery.mainImageId, 'Got:', galleryWithRelations.mainImageId);

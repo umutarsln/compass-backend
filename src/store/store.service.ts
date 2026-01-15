@@ -238,12 +238,25 @@ export class StoreService {
             const price = this.calculateVariantPrice(product, combination);
             const gallery = this.getVariantCombinationGallery(combination, product);
 
+            // priceDelta'ları hesapla
+            const totalPriceDelta = this.calculateVariantPriceDelta(combination);
+
+            // basePrice'a priceDelta'ları ekle
+            const basePriceWithDelta = Number(product.basePrice) + totalPriceDelta;
+
+            // discountedPrice'a da priceDelta'ları ekle (varsa)
+            const discountedPriceWithDelta = product.discountedPrice
+                ? Number(product.discountedPrice) + totalPriceDelta
+                : null;
+
             return {
                 id: combination.id,
                 sku: combination.sku,
                 isActive: combination.isActive,
                 isDisabled: combination.isDisabled,
                 price,
+                basePrice: Math.round(basePriceWithDelta * 100) / 100,
+                discountedPrice: discountedPriceWithDelta ? Math.round(discountedPriceWithDelta * 100) / 100 : null,
                 stock: {
                     availableQuantity: combination.stock?.availableQuantity || 0,
                     reservedQuantity: combination.stock?.reservedQuantity || 0,
@@ -578,6 +591,17 @@ export class StoreService {
         const price = this.calculateVariantPrice(product, combination);
         const gallery = this.getVariantCombinationGallery(combination, product);
 
+        // priceDelta'ları hesapla
+        const totalPriceDelta = this.calculateVariantPriceDelta(combination);
+
+        // basePrice'a priceDelta'ları ekle
+        const basePriceWithDelta = Number(product.basePrice) + totalPriceDelta;
+
+        // discountedPrice'a da priceDelta'ları ekle (varsa)
+        const discountedPriceWithDelta = product.discountedPrice
+            ? Number(product.discountedPrice) + totalPriceDelta
+            : null;
+
         return {
             id: combination.id,
             productId: product.id,
@@ -587,9 +611,9 @@ export class StoreService {
             slug: `${product.slug}-${combination.id.substring(0, 8)}`,
             description: product.description,
             price,
-            basePrice: Number(product.basePrice),
+            basePrice: Math.round(basePriceWithDelta * 100) / 100,
             isOnSale: product.isOnSale,
-            discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
+            discountedPrice: discountedPriceWithDelta ? Math.round(discountedPriceWithDelta * 100) / 100 : null,
             sku: combination.sku || product.sku,
             stock: {
                 availableQuantity: combination.stock?.availableQuantity || 0,
@@ -651,29 +675,17 @@ export class StoreService {
     }
 
     /**
-     * Varyasyon kombinasyonu fiyatını hesapla
-     * BasePrice yerine discountedPrice kullanılır (varsa), sonra deltalar eklenir
+     * Varyasyon kombinasyonunun priceDelta'larını hesapla
      */
-    private calculateVariantPrice(product: Product, combination: VariantCombination): number {
-        // BasePrice yerine discountedPrice kullan (varsa)
-        let startingPrice = Number(product.basePrice);
-        if (product.isOnSale && product.discountedPrice != null) {
-            const discountedPrice = Number(product.discountedPrice);
-            if (!isNaN(discountedPrice) && discountedPrice >= 0) {
-                startingPrice = discountedPrice;
-            }
-        }
-
-        if (isNaN(startingPrice) || startingPrice < 0) {
-            console.warn(`[StoreService] Invalid startingPrice for product ${product.id}:`, startingPrice);
-            return 0;
-        }
-
-        // Variant value'ların priceDelta'larını topla
+    private calculateVariantPriceDelta(combination: VariantCombination): number {
         let totalPriceDelta = 0;
-        if (combination.variantValues && combination.variantValues.length > 0) {
+
+        if (!combination.variantValues) {
+            console.warn(`[StoreService] variantValues not loaded for combination ${combination.id}. PriceDelta will be 0.`);
+        } else if (Array.isArray(combination.variantValues) && combination.variantValues.length > 0) {
             totalPriceDelta = combination.variantValues.reduce(
                 (sum, value) => {
+                    if (!value) return sum;
                     const delta = value.priceDelta != null ? Number(value.priceDelta) : 0;
                     if (isNaN(delta)) {
                         console.warn(`[StoreService] Invalid priceDelta for variantValue ${value.id}:`, value.priceDelta);
@@ -685,8 +697,39 @@ export class StoreService {
             );
         }
 
-        const finalPrice = startingPrice + totalPriceDelta;
-        return Math.max(0, Math.round(finalPrice * 100) / 100);
+        return totalPriceDelta;
+    }
+
+    /**
+     * Varyasyon kombinasyonu fiyatını hesapla
+     * discountedPrice sadece basePrice için geçerlidir, priceDelta'lar her zaman basePrice üzerine eklenir
+     */
+    private calculateVariantPrice(product: Product, combination: VariantCombination): number {
+        // Base price'ı al
+        const basePrice = Number(product.basePrice);
+        if (isNaN(basePrice) || basePrice < 0) {
+            console.warn(`[StoreService] Invalid basePrice for product ${product.id}:`, product.basePrice);
+            return 0;
+        }
+
+        // priceDelta'ları hesapla
+        const totalPriceDelta = this.calculateVariantPriceDelta(combination);
+
+        // Base price'a priceDelta'ları ekle
+        const basePriceWithDelta = basePrice + totalPriceDelta;
+
+        // discountedPrice varsa onu kullan (sadece basePrice yerine), yoksa basePrice kullan
+        let baseOrDiscountedPrice = basePriceWithDelta;
+        if (product.isOnSale && product.discountedPrice != null) {
+            const discountedPrice = Number(product.discountedPrice);
+            if (!isNaN(discountedPrice) && discountedPrice >= 0) {
+                // discountedPrice'a da priceDelta'ları ekle
+                baseOrDiscountedPrice = discountedPrice + totalPriceDelta;
+            }
+        }
+
+        // Final fiyat: (discountedPrice + priceDelta) veya (basePrice + priceDelta)
+        return Math.max(0, Math.round(baseOrDiscountedPrice * 100) / 100);
     }
 
     /**

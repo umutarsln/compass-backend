@@ -42,7 +42,13 @@ export class StoreVariantCombinationDto {
   isDisabled: boolean;
 
   @ApiProperty()
-  price: number; // Hesaplanmış fiyat
+  price: number; // Hesaplanmış fiyat (discountedPrice + priceDelta veya basePrice + priceDelta)
+
+  @ApiProperty()
+  basePrice: number; // Base price + priceDelta'lar
+
+  @ApiProperty({ nullable: true })
+  discountedPrice: number | null; // Discounted price + priceDelta'lar (varsa)
 
   @ApiProperty()
   stock: {
