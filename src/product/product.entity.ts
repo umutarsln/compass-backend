@@ -32,6 +32,9 @@ export class Product {
   @Column()
   name: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  subtitle: string | null;
+
   @Column({ unique: true })
   slug: string;
 
@@ -53,8 +56,8 @@ export class Product {
   @Column({ default: false })
   isOnSale: boolean;
 
-  @Column('decimal', { precision: 5, scale: 2, nullable: true })
-  discountPercent: number | null;
+  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  discountedPrice: number | null;
 
   @Column({ type: 'varchar', nullable: true })
   seoTitle: string | null;

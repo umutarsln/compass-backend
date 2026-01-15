@@ -11,6 +11,7 @@ import { CategoryModule } from './category/category.module';
 import { TagModule } from './tag/tag.module';
 import { StockModule } from './stock/stock.module';
 import { ProductModule } from './product/product.module';
+import { StoreModule } from './store/store.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { ProductModule } from './product/product.module';
     TagModule,
     StockModule,
     ProductModule,
+    StoreModule,
   ],
   controllers: [AppController],
   providers: [AppService],

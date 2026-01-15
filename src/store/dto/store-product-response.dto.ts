@@ -39,6 +39,9 @@ export class StoreProductDto {
   @ApiProperty()
   name: string;
 
+  @ApiProperty({ nullable: true })
+  subtitle: string | null;
+
   @ApiProperty()
   slug: string;
 
@@ -55,7 +58,7 @@ export class StoreProductDto {
   isOnSale: boolean;
 
   @ApiProperty({ nullable: true })
-  discountPercent: number | null;
+  discountedPrice: number | null;
 
   @ApiProperty({ nullable: true })
   sku: string | null;

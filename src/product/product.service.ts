@@ -87,9 +87,9 @@ export class ProductService {
   calculatePrice(product: Product, variantValueIds?: string[]): number {
     let price = product.basePrice;
 
-    // Discount uygula
-    if (product.isOnSale && product.discountPercent) {
-      price = price * (1 - product.discountPercent / 100);
+    // Discount uygula - eğer discountedPrice varsa onu kullan
+    if (product.isOnSale && product.discountedPrice != null) {
+      price = Number(product.discountedPrice);
     }
 
     // Variant product ise ve variant values verilmişse
@@ -276,11 +276,15 @@ export class ProductService {
     }
 
     // Diğer alanları güncelle
-    Object.assign(product, {
-      ...updateProductDto,
-      categoryIds: undefined,
-      tagIds: undefined,
-    });
+    // discountedPrice'ı özel olarak işle - sadece açıkça gönderildiğinde güncelle
+    const { discountedPrice, categoryIds, tagIds, ...restUpdateData } = updateProductDto;
+    
+    Object.assign(product, restUpdateData);
+    
+    // discountedPrice açıkça gönderildiyse (null dahil) güncelle
+    if (discountedPrice !== undefined) {
+      product.discountedPrice = discountedPrice;
+    }
 
     return await this.productRepository.save(product);
   }

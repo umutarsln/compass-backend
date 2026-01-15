@@ -35,6 +35,15 @@ export class UpdateProductDto extends PartialType(CreateProductDto) {
   name?: string;
 
   @ApiProperty({
+    description: 'Ürün alt başlığı (liste görünümünde gösterilir)',
+    example: 'Güncellenmiş alt başlık',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  subtitle?: string;
+
+  @ApiProperty({
     description: 'Ürün açıklaması (Markdown formatında)',
     example: '# Güncellenmiş Açıklama',
     required: false,
@@ -90,15 +99,14 @@ export class UpdateProductDto extends PartialType(CreateProductDto) {
   isOnSale?: boolean;
 
   @ApiProperty({
-    description: 'İndirim yüzdesi',
-    example: 15.0,
+    description: 'İndirimli fiyat (isOnSale true ise bu fiyat kullanılır)',
+    example: 84.99,
     required: false,
   })
   @IsOptional()
   @IsNumber()
   @Min(0)
-  @Max(100)
-  discountPercent?: number;
+  discountedPrice?: number;
 
   @ApiProperty({
     description: 'SEO başlık',

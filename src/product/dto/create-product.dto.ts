@@ -32,6 +32,15 @@ export class CreateProductDto {
   name: string;
 
   @ApiProperty({
+    description: 'Ürün alt başlığı (liste görünümünde gösterilir)',
+    example: 'Kısa ve öz ürün açıklaması',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  subtitle?: string;
+
+  @ApiProperty({
     description: 'Ürün açıklaması (Markdown formatında)',
     example: '# Ürün Açıklaması\n\nBu ürün hakkında detaylı bilgi...',
   })
@@ -88,15 +97,14 @@ export class CreateProductDto {
   isOnSale?: boolean;
 
   @ApiProperty({
-    description: 'İndirim yüzdesi',
-    example: 10.5,
+    description: 'İndirimli fiyat (isOnSale true ise bu fiyat kullanılır)',
+    example: 89.99,
     required: false,
   })
   @IsOptional()
   @IsNumber()
   @Min(0)
-  @Max(100)
-  discountPercent?: number;
+  discountedPrice?: number;
 
   @ApiProperty({
     description: 'SEO başlık',

@@ -117,6 +117,9 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
 
     // Store Endpoints (Public - Authentication gerektirmez)
     'GET /store/products': [], // Public - Mağaza için ürün listesi (basit ürünler ve varyasyon kombinasyonları)
+    'GET /store/products/:id': [], // Public - Ürün detayı (varyasyon seçimi ile)
+    'GET /store/categories': [], // Public - Hiyerarşik ve orderlanmış kategoriler
+    'GET /store/tags': [], // Public - Tag'ler renkleriyle birlikte
 
     // Gelecekte eklenecek endpoint'ler için örnekler:
     // 'GET /products': [], // Public
