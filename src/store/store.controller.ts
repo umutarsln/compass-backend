@@ -40,10 +40,9 @@ export class StoreController {
     @Get('products/:id')
     @ApiOperation({
         summary: 'Ürün detayını getir',
-        description: 'Basit ürünler için direkt detay, varyasyonlu ürünler için varyasyon seçenekleri ve kombinasyonlar döner. variantCombinationId query param ile belirli bir kombinasyon seçilebilir.'
+        description: 'Basit ürünler için direkt detay, varyasyonlu ürünler için varyasyon seçenekleri ve kombinasyonlar döner. variantCombinationId query param ile belirli bir kombinasyon seçilebilir. id parametresi UUID veya slug olabilir.'
     })
-    @ApiParam({ name: 'id', description: 'Ürün ID' })
-    @ApiQuery({ name: 'variantCombinationId', required: false, description: 'Varyasyon kombinasyonu ID (opsiyonel)' })
+    @ApiParam({ name: 'id', description: 'Ürün ID (UUID) veya slug' })
     @ApiResponse({
         status: 200,
         description: 'Ürün detayı başarıyla döndürüldü',
@@ -55,9 +54,8 @@ export class StoreController {
     })
     async getProductDetail(
         @Param('id') productId: string,
-        @Query('variantCombinationId') variantCombinationId?: string,
     ): Promise<StoreProductDetailResponseDto> {
-        return await this.storeService.getProductDetail(productId, variantCombinationId);
+        return await this.storeService.getProductDetail(productId);
     }
 
     @Get('categories')

@@ -123,29 +123,108 @@ export class StoreService {
     /**
      * Ürün detayını getir
      * Basit ürünler için direkt detay, varyasyonlu ürünler için varyasyon seçenekleri ve kombinasyonlar
+     * productId parametresi UUID, product slug veya variant combination slug olabilir
      */
-    async getProductDetail(productId: string, variantCombinationId?: string): Promise<StoreProductDetailResponseDto> {
-        const product = await this.productRepository.findOne({
-            where: { id: productId, isActive: true },
-            relations: [
-                'categories',
-                'tags',
-                'galleries',
-                'galleries.mainImage',
-                'galleries.thumbnailImage',
-                'galleries.detailImages',
-                'stock',
-            ],
-        });
+    async getProductDetail(productId: string): Promise<StoreProductDetailResponseDto> {
+        // UUID formatını kontrol et (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
+        console.log("productId: ", productId);
+        console.log("isUUID: ", isUUID);
+        let product: Product | null = null;
+        let selectedCombinationId: string | null = null; // Slug'dan bulunan kombinasyon ID'si
+
+        if (isUUID) {
+            // UUID ise önce product tablosundan dene
+            product = await this.productRepository.findOne({
+                where: { id: productId, type: ProductType.SIMPLE, isActive: true },
+                relations: [
+                    'categories',
+                    'tags',
+                    'galleries',
+                    'galleries.mainImage',
+                    'galleries.thumbnailImage',
+                    'galleries.detailImages',
+                    'stock',
+                ],
+            });
+
+            console.log("basic product: ", product);
+
+            // Eğer bulunamadıysa, variant_combinations tablosundan dene (combination ID olarak)
+            if (!product) {
+                const combination = await this.variantCombinationRepository.findOne({
+                    where: { id: productId, isActive: true, isDisabled: false },
+                    relations: ['product'],
+                });
+
+                if (combination && combination.product) {
+                    product = await this.productRepository.findOne({
+                        where: { id: combination.product.id, isActive: true },
+                        relations: [
+                            'categories',
+                            'tags',
+                            'galleries',
+                            'galleries.mainImage',
+                            'galleries.thumbnailImage',
+                            'galleries.detailImages',
+                            'stock',
+                        ],
+                    });
+                    selectedCombinationId = combination.id; // UUID'den bulunan kombinasyon ID'sini sakla
+                }
+            }
+        } else {
+
+            // Slug ise, önce basit ürün olarak product tablosundan dene
+            product = await this.productRepository.findOne({
+                where: { slug: productId, isActive: true },
+                relations: [
+                    'categories',
+                    'tags',
+                    'galleries',
+                    'galleries.mainImage',
+                    'galleries.thumbnailImage',
+                    'galleries.detailImages',
+                    'stock',
+                ],
+            });
+
+            console.log("basic product: ", product);
+
+            // Eğer bulunamadıysa, variant_combinations tablosundan dene (combination slug'ı olarak)
+            if (!product) {
+                const combination = await this.variantCombinationRepository.findOne({
+                    where: { slug: productId, isActive: true, isDisabled: false },
+                    relations: ['product'],
+                });
+
+                console.log("combination: ", combination);
+
+                if (combination && combination.product) {
+                    product = await this.productRepository.findOne({
+                        where: { id: combination.product.id, isActive: true },
+                        relations: [
+                            'categories',
+                            'tags',
+                            'galleries',
+                            'galleries.mainImage',
+                            'galleries.thumbnailImage',
+                            'galleries.detailImages',
+                            'stock',
+                        ],
+                    });
+                    selectedCombinationId = combination.id; // Slug'dan bulunan kombinasyon ID'sini sakla
+                }
+            }
+        }
 
         if (!product) {
             throw new NotFoundException('Ürün bulunamadı');
         }
 
-        const baseGallery = this.getProductGallery(product);
-
         // Basit ürün için
         if (product.type === ProductType.SIMPLE) {
+            const baseGallery = this.getProductGallery(product);
             const price = this.calculatePrice(product);
             return {
                 productId: product.id,
@@ -190,7 +269,7 @@ export class StoreService {
         // Varyasyonlu ürün için
         // Varyasyon seçeneklerini getir
         const variantOptions = await this.variantOptionRepository.find({
-            where: { productId },
+            where: { productId: product.id },
             relations: ['values'],
             order: { displayOrder: 'ASC' },
         });
@@ -198,7 +277,7 @@ export class StoreService {
         // Tüm aktif kombinasyonları getir
         const combinations = await this.variantCombinationRepository.find({
             where: {
-                productId,
+                productId: product.id,
                 isActive: true,
                 isDisabled: false,
             },
@@ -251,6 +330,7 @@ export class StoreService {
 
             return {
                 id: combination.id,
+                slug: combination.slug,
                 sku: combination.sku,
                 isActive: combination.isActive,
                 isDisabled: combination.isDisabled,
@@ -278,13 +358,41 @@ export class StoreService {
             };
         });
 
-        // Seçili kombinasyonu bul
+        // Seçili kombinasyonu bul (slug'dan bulunan kombinasyon ID'sine göre)
         let selectedCombination: StoreVariantCombinationDto | null = null;
-        if (variantCombinationId) {
-            const found = mappedCombinations.find((c) => c.id === variantCombinationId);
-            if (found) {
-                selectedCombination = found;
+        let displayGallery: StoreProductGalleryDto;
+
+        if (selectedCombinationId) {
+            selectedCombination = mappedCombinations.find(c => c.id === selectedCombinationId) || null;
+
+            // Eğer seçili kombinasyon varsa, önce onun galerisi var mı kontrol et
+            if (selectedCombination) {
+                const selectedCombinationEntity = combinations.find(c => c.id === selectedCombinationId);
+                if (selectedCombinationEntity) {
+                    // Kombinasyonun kendi galerisi var mı kontrol et
+                    const hasCombinationGallery =
+                        selectedCombinationEntity.galleries &&
+                        selectedCombinationEntity.galleries.length > 0;
+
+                    if (hasCombinationGallery) {
+                        // Kombinasyonun galerisi varsa, direkt onu kullan (base gallery hesaplamaya gerek yok)
+                        // getVariantCombinationGallery içinde zaten kombinasyonun galerisini döndürür, getProductGallery çağırmaz
+                        displayGallery = this.getVariantCombinationGallery(selectedCombinationEntity, product);
+                    } else {
+                        // Kombinasyonun galerisi yoksa, base gallery'yi hesapla
+                        displayGallery = this.getProductGallery(product);
+                    }
+                } else {
+                    // Entity bulunamadıysa base gallery kullan
+                    displayGallery = this.getProductGallery(product);
+                }
+            } else {
+                // Seçili kombinasyon bulunamadıysa base gallery kullan
+                displayGallery = this.getProductGallery(product);
             }
+        } else {
+            // Seçili kombinasyon yoksa base gallery kullan
+            displayGallery = this.getProductGallery(product);
         }
 
         return {
@@ -297,7 +405,7 @@ export class StoreService {
             isOnSale: product.isOnSale,
             discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
             type: 'VARIANT',
-            gallery: baseGallery,
+            gallery: displayGallery,
             categories: (product.categories || []).map((cat) => ({
                 id: cat.id,
                 name: cat.name,
@@ -583,6 +691,20 @@ export class StoreService {
         };
     }
 
+
+
+    /**
+     * Slug oluşturur (URL-friendly string)
+     */
+    private generateSlug(text: string): string {
+        return text
+            .toLowerCase()
+            .trim()
+            .replace(/[^\w\s-]/g, '')
+            .replace(/[\s_-]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+
     /**
      * Varyasyon kombinasyonunu StoreProductDto'ya map et
      */
@@ -602,13 +724,20 @@ export class StoreService {
             ? Number(product.discountedPrice) + totalPriceDelta
             : null;
 
+        // Slug her zaman kombinasyon slug'ı olmalı (getProductDetail ile uyumlu olması için)
+        // Eğer slug yoksa, bu bir hata durumudur çünkü slug'lar generateAllVariantCombinations'da oluşturulmalı
+        const combinationSlug = combination.slug;
+        if (!combinationSlug) {
+            console.warn(`[StoreService] Variant combination ${combination.id} has no slug. This should not happen.`);
+        }
+
         return {
             id: combination.id,
             productId: product.id,
             variantCombinationId: combination.id,
             name: product.name,
             subtitle: product.subtitle,
-            slug: `${product.slug}-${combination.id.substring(0, 8)}`,
+            slug: combinationSlug || `${product.slug}-${combination.id.substring(0, 8)}`, // Fallback sadece hata durumunda
             description: product.description,
             price,
             basePrice: Math.round(basePriceWithDelta * 100) / 100,

@@ -32,6 +32,9 @@ export class StoreVariantCombinationDto {
   @ApiProperty()
   id: string;
 
+  @ApiProperty({ nullable: true })
+  slug: string | null;
+
   @ApiProperty()
   sku: string | null;
 

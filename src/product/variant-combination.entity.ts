@@ -10,6 +10,7 @@ import {
   OneToMany,
   JoinColumn,
   JoinTable,
+  Unique,
 } from 'typeorm';
 import { Product } from './product.entity';
 import { VariantValue } from './variant-value.entity';
@@ -17,6 +18,7 @@ import { ProductGallery } from './product-gallery.entity';
 import { Stock } from '../stock/stock.entity';
 
 @Entity('variant_combinations')
+@Unique('unique_slug', ['slug'])
 export class VariantCombination {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -30,6 +32,9 @@ export class VariantCombination {
 
   @Column({ type: 'varchar', unique: true, nullable: true })
   sku: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  slug: string | null;
 
   @Column({ default: true })
   isActive: boolean;

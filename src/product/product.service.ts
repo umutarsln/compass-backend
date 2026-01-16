@@ -82,6 +82,70 @@ export class ProductService {
   }
 
   /**
+   * Varyasyon kombinasyonu için slug oluştur
+   * Format: product-slug-varyasyon-adi-varyasyon-degeri
+   * Örnek: urun-adi-renk-kirmizi-boyut-l
+   */
+  private generateVariantCombinationSlug(product: Product, variantValues: VariantValue[]): string {
+    const variantParts: string[] = [];
+
+    // Varyasyon değerlerini displayOrder'a göre sırala
+    const sortedValues = [...variantValues].sort((a, b) => {
+      const aOrder = a.variantOption?.displayOrder || 0;
+      const bOrder = b.variantOption?.displayOrder || 0;
+      return aOrder - bOrder;
+    });
+    console.log("sortedValues: ", sortedValues);
+    console.log("variantValues: ", variantValues);
+
+    // Her varyasyon değeri için slug parçası oluştur
+    for (const value of sortedValues) {
+      if (value.variantOption) {
+        const optionSlug = this.generateSlug(value.variantOption.name);
+        const valueSlug = this.generateSlug(value.value);
+        variantParts.push(`${optionSlug}-${valueSlug}`);
+      }
+    }
+
+    // Varyasyon parçalarını birleştir
+    const variantSlug = variantParts.length > 0 ? `-${variantParts.join('-')}` : '';
+    return `${product.slug}${variantSlug}`;
+  }
+
+  /**
+   * Varyasyon kombinasyonu için benzersiz slug oluştur
+   * Slug formatı: product-slug-varyasyon-adi-varyasyon-degeri
+   * Örnek: urun-adi-renk-kirmizi-boyut-l
+   * Slug tüm sistemde unique olmalı
+   * @param excludeId Mevcut kombinasyon ID'si (güncelleme sırasında kendisini hariç tutmak için)
+   */
+  private async generateUniqueVariantCombinationSlug(
+    product: Product,
+    variantValues: VariantValue[],
+    excludeId?: string,
+  ): Promise<string> {
+    const baseSlug = this.generateVariantCombinationSlug(product, variantValues);
+    let slug = baseSlug;
+    let counter = 1;
+
+    while (true) {
+      const existing = await this.variantCombinationRepository.findOne({
+        where: { slug }, // Tüm sistemde unique kontrolü
+      });
+
+      // Eğer bulunan kombinasyon exclude edilecek ID ise veya hiç yoksa, bu slug'ı kullanabiliriz
+      if (!existing || (excludeId && existing.id === excludeId)) {
+        break;
+      }
+
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
+
+    return slug;
+  }
+
+  /**
    * Ürün fiyatını hesaplar
    */
   calculatePrice(product: Product, variantValueIds?: string[]): number {
@@ -1196,7 +1260,7 @@ export class ProductService {
     // Tüm varyasyon seçeneklerini ve aktif değerlerini getir
     const variantOptions = await this.variantOptionRepository.find({
       where: { productId },
-      relations: ['values'],
+      relations: ['values', 'values.variantOption', 'values.combinations'],
       order: { displayOrder: 'ASC' },
     });
 
@@ -1236,13 +1300,15 @@ export class ProductService {
       relations: ['variantValues'],
     });
 
-    // Yeni kombinasyonları oluştur
+    // Yeni kombinasyonları oluştur ve mevcut kombinasyonları güncelle
     const newCombinations: VariantCombination[] = [];
+    const combinationsToUpdate: VariantCombination[] = [];
+    const existingCombinationIds = new Set<string>();
 
     for (const variantValues of combinations) {
       // Bu kombinasyon zaten var mı kontrol et - her varyasyon seçeneğinden bir değer olmalı
       const variantValueIds = variantValues.map((v) => v.id).sort();
-      const exists = existingCombinations.some((existing) => {
+      const existingCombination = existingCombinations.find((existing) => {
         if (!existing.variantValues || existing.variantValues.length === 0) {
           return false;
         }
@@ -1254,10 +1320,36 @@ export class ProductService {
         return existingIds.every((id, index) => id === variantValueIds[index]);
       });
 
-      if (!exists) {
+      if (existingCombination) {
+        // Mevcut kombinasyon bulundu
+        existingCombinationIds.add(existingCombination.id);
+
+        // Slug yoksa veya mevcut slug başka bir kombinasyonda varsa oluştur ve güncelle
+        // if (!existingCombination.slug) {
+        const slug = await this.generateVariantCombinationSlug(product, variantValues);
+        existingCombination.slug = slug;
+        combinationsToUpdate.push(existingCombination);
+        // } else {
+        //   // Slug var ama başka bir kombinasyonda da kullanılıyor mu kontrol et (tüm sistemde)
+        //   const slugExists = await this.variantCombinationRepository.findOne({
+        //     where: { slug: existingCombination.slug },
+        //   });
+
+        //   // Eğer slug başka bir kombinasyona aitse (kendisi değilse), yeni slug oluştur
+        //   if (slugExists && slugExists.id !== existingCombination.id) {
+        //     const newSlug = await this.generateUniqueVariantCombinationSlug(product, variantValues, existingCombination.id);
+        //     existingCombination.slug = newSlug;
+        //     combinationsToUpdate.push(existingCombination);
+        //   }
+        // }
+      } else {
+        // Yeni kombinasyon oluştur
+        const slug = await this.generateUniqueVariantCombinationSlug(product, variantValues);
+
         const combination = this.variantCombinationRepository.create({
           productId,
           variantValues,
+          slug,
           isActive: true,
           isDisabled: false,
         });
@@ -1267,9 +1359,42 @@ export class ProductService {
 
     // Yeni kombinasyonları kaydet
     if (newCombinations.length > 0) {
+      await this.variantCombinationRepository.save(newCombinations);
+    }
+
+    // Slug'ı olmayan veya çakışan mevcut kombinasyonları tek tek güncelle
+    // (Aynı anda birden fazla güncelleme yaparken duplicate hatası alınmaması için)
+    for (const combination of combinationsToUpdate) {
+      await this.variantCombinationRepository.save(combination);
+    }
+
+    // Yeni kombinasyonlar listesinde olmayan mevcut kombinasyonları sil
+    const combinationsToDelete = existingCombinations.filter(
+      (existing) => !existingCombinationIds.has(existing.id)
+    );
+
+    if (combinationsToDelete.length > 0) {
+      // Önce stock kayıtlarını sil
+      for (const combination of combinationsToDelete) {
+        const stock = await this.stockRepository.findOne({
+          where: {
+            sellableType: SellableType.VARIANT_COMBINATION,
+            sellableId: combination.id,
+          },
+        });
+        if (stock) {
+          await this.stockRepository.remove(stock);
+        }
+      }
+
+      // Sonra kombinasyonları sil
+      await this.variantCombinationRepository.remove(combinationsToDelete);
+    }
+
+    // Yeni oluşturulan kombinasyonlar için stock kaydı oluştur (eğer yoksa)
+    if (newCombinations.length > 0) {
       const savedCombinations = await this.variantCombinationRepository.save(newCombinations);
 
-      // Her kombinasyon için stock kaydı oluştur (eğer yoksa)
       for (const combination of savedCombinations) {
         // Stock zaten var mı kontrol et
         const existingStock = await this.stockRepository.findOne({
@@ -1401,10 +1526,14 @@ export class ProductService {
       }
     }
 
+    // Slug oluştur
+    const slug = await this.generateUniqueVariantCombinationSlug(product, variantValues);
+
     const combination = this.variantCombinationRepository.create({
       productId,
       variantValues,
       sku: createVariantCombinationDto.sku || null,
+      slug,
       isActive: createVariantCombinationDto.isActive ?? true,
       isDisabled: createVariantCombinationDto.isDisabled ?? false,
     });
@@ -1487,6 +1616,15 @@ export class ProductService {
       }
 
       combination.variantValues = variantValues;
+
+      // Varyasyon değerleri değiştiyse slug'ı yeniden oluştur
+      const product = await this.productRepository.findOne({
+        where: { id: combination.productId },
+      });
+      if (product) {
+        const newSlug = await this.generateUniqueVariantCombinationSlug(product, variantValues, combination.id);
+        combination.slug = newSlug;
+      }
     }
 
     // SKU kontrolü
