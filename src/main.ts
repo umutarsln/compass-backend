@@ -10,7 +10,7 @@ async function bootstrap() {
 
   // CORS Configuration
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'https://shawk.com.tr', 'http://shawk.com.tr', 'https://admin.shawk.com.tr', 'http://admin.shawk.com.tr'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
