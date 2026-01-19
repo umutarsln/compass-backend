@@ -12,6 +12,8 @@ import { TagModule } from './tag/tag.module';
 import { StockModule } from './stock/stock.module';
 import { ProductModule } from './product/product.module';
 import { StoreModule } from './store/store.module';
+import { CartModule } from './cart/cart.module';
+import { FavoriteModule } from './favorite/favorite.module';
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { StoreModule } from './store/store.module';
     StockModule,
     ProductModule,
     StoreModule,
+    CartModule,
+    FavoriteModule,
   ],
   controllers: [AppController],
   providers: [AppService],

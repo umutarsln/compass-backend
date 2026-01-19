@@ -198,8 +198,6 @@ export class StoreService {
                     relations: ['product'],
                 });
 
-                console.log("combination: ", combination);
-
                 if (combination && combination.product) {
                     product = await this.productRepository.findOne({
                         where: { id: combination.product.id, isActive: true },

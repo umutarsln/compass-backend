@@ -1,0 +1,242 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
+import { CartService } from './cart.service';
+import { AddItemDto } from './dto/add-item.dto';
+import { UpdateItemDto } from './dto/update-item.dto';
+import { CartResponseDto } from './dto/cart-response.dto';
+import { GuestCartGuard } from './guards/guest-cart.guard';
+import { UserCartGuard } from './guards/user-cart.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Public } from '../common/decorators/public.decorator';
+
+@ApiTags('Cart')
+@Controller('carts')
+export class CartController {
+  constructor(private readonly cartService: CartService) {}
+
+  @Post('guest')
+  @Public()
+  @ApiOperation({ summary: 'Create guest cart' })
+  @ApiResponse({
+    status: 201,
+    description: 'Guest cart created',
+    type: CartResponseDto,
+  })
+  async createGuestCart(): Promise<CartResponseDto> {
+    const cart = await this.cartService.createGuestCart();
+    return this.mapToResponseDto(cart);
+  }
+
+  @Get(':id')
+  @UseGuards(GuestCartGuard)
+  @Public()
+  @ApiOperation({ summary: 'Get cart by ID' })
+  @ApiParam({ name: 'id', description: 'Cart ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cart retrieved',
+    type: CartResponseDto,
+  })
+  async getCart(@Param('id') id: string): Promise<CartResponseDto> {
+    const cart = await this.cartService.getCart(id, null);
+    return this.mapToResponseDto(cart);
+  }
+
+  @Post(':id/items')
+  @UseGuards(GuestCartGuard)
+  @Public()
+  @ApiOperation({ summary: 'Add item to cart' })
+  @ApiParam({ name: 'id', description: 'Cart ID' })
+  @ApiResponse({
+    status: 201,
+    description: 'Item added to cart',
+  })
+  async addItem(
+    @Param('id') cartId: string,
+    @Body() addItemDto: AddItemDto,
+  ): Promise<CartResponseDto> {
+    await this.cartService.addItem(
+      cartId,
+      addItemDto.productId,
+      addItemDto.quantity,
+      addItemDto.variantId,
+      null,
+    );
+    const cart = await this.cartService.getCart(cartId, null);
+    return this.mapToResponseDto(cart);
+  }
+
+  @Patch(':id/items/:itemId')
+  @UseGuards(GuestCartGuard)
+  @Public()
+  @ApiOperation({ summary: 'Update item quantity' })
+  @ApiParam({ name: 'id', description: 'Cart ID' })
+  @ApiParam({ name: 'itemId', description: 'Cart item ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Item updated',
+  })
+  async updateItem(
+    @Param('id') cartId: string,
+    @Param('itemId') itemId: string,
+    @Body() updateItemDto: UpdateItemDto,
+  ): Promise<CartResponseDto> {
+    await this.cartService.updateItem(cartId, itemId, updateItemDto.quantity, null);
+    const cart = await this.cartService.getCart(cartId, null);
+    return this.mapToResponseDto(cart);
+  }
+
+  @Delete(':id/items/:itemId')
+  @UseGuards(GuestCartGuard)
+  @Public()
+  @ApiOperation({ summary: 'Remove item from cart' })
+  @ApiParam({ name: 'id', description: 'Cart ID' })
+  @ApiParam({ name: 'itemId', description: 'Cart item ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Item removed',
+  })
+  async removeItem(
+    @Param('id') cartId: string,
+    @Param('itemId') itemId: string,
+  ): Promise<CartResponseDto> {
+    await this.cartService.removeItem(cartId, itemId, null);
+    const cart = await this.cartService.getCart(cartId, null);
+    return this.mapToResponseDto(cart);
+  }
+
+  @Post(':id/merge')
+  @UseGuards(JwtAuthGuard, UserCartGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Merge guest cart into user cart' })
+  @ApiParam({ name: 'id', description: 'Guest cart ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cart merged successfully',
+    type: CartResponseDto,
+  })
+  async mergeCart(
+    @Param('id') guestCartId: string,
+    @Request() req: any,
+  ): Promise<CartResponseDto> {
+    const userId = req.user.id;
+    const cart = await this.cartService.mergeCart(guestCartId, userId);
+    return this.mapToResponseDto(cart);
+  }
+
+  @Get('me/cart')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Get user's active cart" })
+  @ApiResponse({
+    status: 200,
+    description: 'User cart retrieved',
+    type: CartResponseDto,
+  })
+  async getUserCart(@Request() req: any): Promise<CartResponseDto | null> {
+    const userId = req.user.id;
+    const cart = await this.cartService.getUserCart(userId);
+    if (!cart) {
+      return null;
+    }
+    return this.mapToResponseDto(cart);
+  }
+
+  private mapToResponseDto(cart: any): CartResponseDto {
+    return {
+      id: cart.id,
+      userId: cart.userId,
+      status: cart.status,
+      items: cart.items?.map((item: any) => {
+        // Get product gallery (first gallery for product)
+        const productGallery = item.product?.galleries?.[0];
+        
+        // Get variant gallery (first gallery for variant) or use product gallery
+        const variantGallery = item.variant?.galleries?.[0] || productGallery;
+
+        // Map variant values
+        const variantValues = item.variant?.variantValues?.map((vv: any) => ({
+          id: vv.id,
+          value: vv.value,
+          colorCode: vv.colorCode,
+          variantOption: vv.variantOption ? {
+            id: vv.variantOption.id,
+            name: vv.variantOption.name,
+            type: vv.variantOption.type,
+          } : null,
+        })) || [];
+
+        return {
+          id: item.id,
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+          basePrice: Number(item.basePrice),
+          discountedPrice: item.discountedPrice ? Number(item.discountedPrice) : null,
+          currency: item.currency,
+          product: item.product ? {
+            id: item.product.id,
+            name: item.product.name,
+            slug: item.product.slug,
+            basePrice: Number(item.product.basePrice),
+            discountedPrice: item.product.discountedPrice ? Number(item.product.discountedPrice) : null,
+            isOnSale: item.product.isOnSale,
+            gallery: productGallery ? {
+              mainImage: productGallery.mainImage ? {
+                id: productGallery.mainImage.id,
+                s3Url: productGallery.mainImage.s3Url,
+                displayName: productGallery.mainImage.displayName,
+                filename: productGallery.mainImage.filename,
+              } : null,
+              thumbnailImage: productGallery.thumbnailImage ? {
+                id: productGallery.thumbnailImage.id,
+                s3Url: productGallery.thumbnailImage.s3Url,
+                displayName: productGallery.thumbnailImage.displayName,
+                filename: productGallery.thumbnailImage.filename,
+              } : null,
+            } : null,
+          } : null,
+          variant: item.variant ? {
+            id: item.variant.id,
+            slug: item.variant.slug,
+            gallery: variantGallery ? {
+              mainImage: variantGallery.mainImage ? {
+                id: variantGallery.mainImage.id,
+                s3Url: variantGallery.mainImage.s3Url,
+                displayName: variantGallery.mainImage.displayName,
+                filename: variantGallery.mainImage.filename,
+              } : null,
+              thumbnailImage: variantGallery.thumbnailImage ? {
+                id: variantGallery.thumbnailImage.id,
+                s3Url: variantGallery.thumbnailImage.s3Url,
+                displayName: variantGallery.thumbnailImage.displayName,
+                filename: variantGallery.thumbnailImage.filename,
+              } : null,
+            } : null,
+            variantValues: variantValues,
+          } : null,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      }) || [],
+      createdAt: cart.createdAt,
+      updatedAt: cart.updatedAt,
+    };
+  }
+}
