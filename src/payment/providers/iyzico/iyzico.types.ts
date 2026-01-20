@@ -62,6 +62,8 @@ export interface IyzicoCheckoutFormInitializeResponse {
 }
 
 export interface IyzicoCheckoutFormRetrieveRequest {
+    locale: string;
+    conversationId: string;
     token: string;
 }
 

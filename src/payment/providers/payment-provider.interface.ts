@@ -68,7 +68,7 @@ export interface PaymentProvider {
     providerRef?: string;
   }>;
 
-  retrieveCheckout(token: string): Promise<NormalizedPaymentResult>;
+  retrieveCheckout(token: string, conversationId?: string): Promise<NormalizedPaymentResult>;
 
   handleWebhook(payload: any): Promise<NormalizedWebhookResult>;
 }

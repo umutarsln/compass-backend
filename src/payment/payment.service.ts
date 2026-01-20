@@ -347,7 +347,7 @@ export class PaymentService {
             // Retrieve payment status from provider
             this.logger.log(`[handleCallback] Retrieving payment status from provider ${provider}...`);
             const providerInstance = this.getProvider(provider);
-            const result = await providerInstance.retrieveCheckout(token);
+            const result = await providerInstance.retrieveCheckout(token, attempt.conversationId);
             this.logger.log(`[handleCallback] Provider returned status: ${result.status}, paymentId: ${result.providerPaymentId || 'N/A'}`);
 
             // Update attempt

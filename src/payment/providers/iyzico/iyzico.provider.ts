@@ -201,12 +201,20 @@ export class IyzicoProvider implements PaymentProvider {
         }
     }
 
-    async retrieveCheckout(token: string): Promise<NormalizedPaymentResult> {
-        this.logger.log(`[retrieveCheckout] Retrieving checkout status for token: ${token.substring(0, 20)}...`);
+    async retrieveCheckout(token: string, conversationId?: string): Promise<NormalizedPaymentResult> {
+        this.logger.log(`[retrieveCheckout] Retrieving checkout status for token: ${token.substring(0, 20)}..., conversationId: ${conversationId || 'N/A'}`);
         
         try {
+            if (!conversationId) {
+                this.logger.warn(`[retrieveCheckout] conversationId not provided, using default`);
+            }
+            
             this.logger.debug(`[retrieveCheckout] Calling Iyzico API retrieveCheckoutForm...`);
-            const response = await this.httpClient.retrieveCheckoutForm({ token });
+            const response = await this.httpClient.retrieveCheckoutForm({ 
+                locale: 'tr',
+                conversationId: conversationId || '',
+                token 
+            });
 
             this.logger.debug(`[retrieveCheckout] Iyzico response: ${JSON.stringify({ status: response.status, paymentStatus: response.paymentStatus, paymentId: response.paymentId, errorCode: response.errorCode, errorMessage: response.errorMessage })}`);
 

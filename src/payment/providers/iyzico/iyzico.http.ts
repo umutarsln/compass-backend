@@ -136,13 +136,14 @@ export class IyzicoHttpClient {
 
     /**
      * Retrieve checkout form result
+     * Endpoint matches Python SDK: /payment/iyzipos/checkoutform/auth/ecom/detail
      */
     async retrieveCheckoutForm(
         request: IyzicoCheckoutFormRetrieveRequest,
     ): Promise<IyzicoCheckoutFormRetrieveResponse> {
-        this.logger.log(`[retrieveCheckoutForm] Retrieving checkout form - token: ${request.token.substring(0, 20)}...`);
+        this.logger.log(`[retrieveCheckoutForm] Retrieving checkout form - token: ${request.token.substring(0, 20)}..., conversationId: ${request.conversationId}`);
         return this.makeRequest<IyzicoCheckoutFormRetrieveResponse>(
-            '/payment/checkoutform/auth/ecom/detail',
+            '/payment/iyzipos/checkoutform/auth/ecom/detail',
             request,
         );
     }
