@@ -62,12 +62,12 @@ export class IyzicoProvider implements PaymentProvider {
             'PT': 'Portugal',
             'IE': 'Ireland',
         };
-        
+
         // If already a full country name, return as is
         if (country.length > 2) {
             return country;
         }
-        
+
         // Convert ISO code to full country name
         return countryMap[country.toUpperCase()] || country;
     }
@@ -120,10 +120,13 @@ export class IyzicoProvider implements PaymentProvider {
                 surname: input.buyerInfo.surname,
                 gsmNumber: input.buyerInfo.phone,
                 email: input.buyerInfo.email,
-                ...(input.buyerInfo.identityNumber && { identityNumber: input.buyerInfo.identityNumber }),
-                ...(input.buyerInfo.city && { city: input.buyerInfo.city }),
-                country: this.normalizeCountry(input.buyerInfo.country || 'TR'),
-                ...(input.buyerInfo.zipCode && { zipCode: input.buyerInfo.zipCode }),
+                // Iyzico requires identityNumber field, send default value if not provided
+                identityNumber: input.buyerInfo.identityNumber || '11111111111',
+                // Iyzico requires registrationAddress, use shippingAddress if available
+                registrationAddress: input.shippingAddress.address || input.buyerInfo.address || '',
+                city: input.shippingAddress.city || input.buyerInfo.city || '',
+                country: this.normalizeCountry(input.shippingAddress.country || input.buyerInfo.country || 'TR'),
+                zipCode: input.shippingAddress.zipCode || input.buyerInfo.zipCode || '',
             },
             shippingAddress: {
                 contactName: input.shippingAddress.contactName,
