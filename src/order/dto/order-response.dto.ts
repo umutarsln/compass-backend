@@ -16,6 +16,7 @@ export class OrderItemResponseDto {
 
 export class OrderResponseDto {
   id: string;
+  orderNo: string; // 8 haneli unique sipariş numarası
   userId: string | null;
   cartId: string | null;
   guestEmail: string | null;

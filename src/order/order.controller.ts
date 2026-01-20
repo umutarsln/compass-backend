@@ -8,6 +8,7 @@ import {
     Query,
     UseGuards,
     Request,
+    ForbiddenException,
 } from '@nestjs/common';
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -36,16 +37,27 @@ export class OrderController {
     }
 
     /**
-     * Get order by ID
+     * Get order by ID or order number
      */
     @Get(':id')
-    @UseGuards(JwtAuthGuard)
     async getOrder(
-        @Param('id') orderId: string,
+        @Param('id') id: string,
         @Request() req: any,
     ): Promise<OrderResponseDto> {
         const userId = req.user?.userId || req.user?.id || null;
-        return this.orderService.getOrder(orderId, userId);
+        
+        // Check if id is 8 digits (orderNo) or UUID (orderId)
+        const isOrderNo = /^\d{8}$/.test(id);
+        
+        if (isOrderNo) {
+            return this.orderService.getOrderByOrderNo(id, userId);
+        } else {
+            // For UUID, require authentication
+            if (!userId) {
+                throw new ForbiddenException('Authentication required to access order by ID');
+            }
+            return this.orderService.getOrder(id, userId);
+        }
     }
 
     /**

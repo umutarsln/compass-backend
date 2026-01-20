@@ -19,6 +19,9 @@ export class Order {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'varchar', length: 8, unique: true, nullable: false })
+  orderNo: string; // 8 haneli unique sipariş numarası
+
   @Column({ type: 'uuid', nullable: true })
   userId: string | null;
 

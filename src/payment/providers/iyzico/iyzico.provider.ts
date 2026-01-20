@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as crypto from 'crypto';
 import {
     PaymentProvider,
     InitializeCheckoutInput,
@@ -130,7 +131,8 @@ export class IyzicoProvider implements PaymentProvider {
             callbackUrl: input.callbackUrl || this.callbackUrl,
             enabledInstallments: ['2', '3', '6', '9', '12'], // Common installments for Turkey (as strings per Iyzico Python example)
             buyer: {
-                ...(input.buyerInfo.id && { id: input.buyerInfo.id }),
+                // Iyzico requires buyerId, use provided id or generate UUID for guest
+                id: input.buyerInfo.id || crypto.randomUUID(),
                 name: input.buyerInfo.name,
                 surname: input.buyerInfo.surname,
                 gsmNumber: input.buyerInfo.phone,

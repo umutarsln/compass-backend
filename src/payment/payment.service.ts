@@ -176,8 +176,12 @@ export class PaymentService {
                 throw new BadRequestException('Postal code is required for checkout');
             }
 
+            // Generate buyerId: use userId if authenticated, otherwise generate UUID for guest
+            const buyerId = orderEntity.userId || crypto.randomUUID();
+            this.logger.debug(`[createCheckout] Buyer ID: ${buyerId} (${orderEntity.userId ? 'authenticated user' : 'guest user'})`);
+
             const buyerInfo = {
-                id: orderEntity.userId || undefined,
+                id: buyerId,
                 name: buyerName,
                 surname: buyerSurname,
                 email: userEmail,

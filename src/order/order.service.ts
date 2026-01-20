@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -18,6 +19,8 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
 @Injectable()
 export class OrderService {
+  private readonly logger = new Logger(OrderService.name);
+
   constructor(
     @InjectRepository(Order)
     private orderRepository: Repository<Order>,
@@ -26,6 +29,34 @@ export class OrderService {
     private cartService: CartService,
     private dataSource: DataSource,
   ) {}
+
+  /**
+   * Generate unique 8-digit order number
+   */
+  private async generateOrderNo(): Promise<string> {
+    let orderNo: string;
+    let exists: boolean;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    do {
+      // Generate 8-digit number (00000000-99999999)
+      const randomNum = Math.floor(Math.random() * 100000000);
+      orderNo = randomNum.toString().padStart(8, '0');
+      
+      // Check if it already exists
+      exists = await this.orderRepository.exists({ where: { orderNo } });
+      attempts++;
+
+      if (attempts >= maxAttempts) {
+        this.logger.error(`[generateOrderNo] Failed to generate unique orderNo after ${maxAttempts} attempts`);
+        throw new BadRequestException('Failed to generate unique order number. Please try again.');
+      }
+    } while (exists);
+
+    this.logger.debug(`[generateOrderNo] Generated unique orderNo: ${orderNo} (attempts: ${attempts})`);
+    return orderNo;
+  }
 
   /**
    * Create order from cart
@@ -76,8 +107,13 @@ export class OrderService {
     await queryRunner.startTransaction();
 
     try {
+      // Generate unique order number
+      const orderNo = await this.generateOrderNo();
+      this.logger.log(`[createOrder] Generated orderNo: ${orderNo} for order`);
+
       // Create order
       const order = queryRunner.manager.create(Order, {
+        orderNo,
         userId: userId || null,
         cartId: cart.id,
         guestEmail: createOrderDto.guestEmail || null,
@@ -161,6 +197,33 @@ export class OrderService {
       throw new ForbiddenException('You do not have access to this order');
     }
 
+    return this.mapToResponseDto(order);
+  }
+
+  /**
+   * Get order by order number
+   */
+  async getOrderByOrderNo(orderNo: string, userId?: string | null): Promise<OrderResponseDto> {
+    this.logger.log(`[getOrderByOrderNo] Searching for order with orderNo: ${orderNo}`);
+
+    const order = await this.orderRepository.findOne({
+      where: { orderNo },
+      relations: ['items', 'items.product', 'items.variant'],
+    });
+
+    if (!order) {
+      this.logger.warn(`[getOrderByOrderNo] Order not found with orderNo: ${orderNo}`);
+      throw new NotFoundException('Order not found');
+    }
+
+    // Check access: user can only see their own orders, or admin can see all
+    // For guest orders, allow access if email matches
+    if (userId && order.userId && order.userId !== userId) {
+      this.logger.warn(`[getOrderByOrderNo] Access denied for orderNo: ${orderNo}, userId: ${userId}`);
+      throw new ForbiddenException('You do not have access to this order');
+    }
+
+    this.logger.log(`[getOrderByOrderNo] Order found: ${order.id}, orderNo: ${order.orderNo}`);
     return this.mapToResponseDto(order);
   }
 
@@ -258,6 +321,7 @@ export class OrderService {
   private mapToResponseDto(order: Order): OrderResponseDto {
     return {
       id: order.id,
+      orderNo: order.orderNo,
       userId: order.userId,
       cartId: order.cartId,
       guestEmail: order.guestEmail,
