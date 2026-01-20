@@ -14,6 +14,8 @@ import { ProductModule } from './product/product.module';
 import { StoreModule } from './store/store.module';
 import { CartModule } from './cart/cart.module';
 import { FavoriteModule } from './favorite/favorite.module';
+import { OrderModule } from './order/order.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
@@ -46,6 +48,8 @@ import { FavoriteModule } from './favorite/favorite.module';
     StoreModule,
     CartModule,
     FavoriteModule,
+    OrderModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

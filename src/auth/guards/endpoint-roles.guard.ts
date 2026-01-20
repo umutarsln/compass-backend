@@ -37,7 +37,15 @@ export class EndpointRolesGuard extends AuthGuard('jwt') implements CanActivate 
     const requiredRoles = getRequiredRoles(method, path);
 
     // Eğer boş array ise, public endpoint (auth gerekmez)
+    // Ama token varsa parse et ki req.user set edilsin (optional auth için)
     if (requiredRoles.length === 0) {
+      // Token varsa parse et (optional), yoksa devam et
+      try {
+        await super.canActivate(context);
+      } catch (error) {
+        // Token yoksa veya geçersizse, public endpoint olduğu için devam et
+        // Sadece req.user undefined kalır
+      }
       return true;
     }
 
