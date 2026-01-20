@@ -71,7 +71,9 @@ export class IyzicoProvider implements PaymentProvider {
             paidPrice: amount.toFixed(2),
             currency: input.currency,
             basketId: input.orderId,
+            paymentGroup: 'PRODUCT', // Iyzico example shows this field
             callbackUrl: input.callbackUrl || this.callbackUrl,
+            enabledInstallments: [1, 2, 3, 4, 6, 9, 12], // Common installments for Turkey
             buyer: {
                 ...(input.buyerInfo.id && { id: input.buyerInfo.id }),
                 name: input.buyerInfo.name,

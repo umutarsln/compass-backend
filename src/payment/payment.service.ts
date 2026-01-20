@@ -61,7 +61,7 @@ export class PaymentService {
         // Get order entity with user relation for email access
         const orderEntity = await this.orderRepository.findOne({
             where: { id: checkoutDto.orderId },
-            relations: ['user', 'items', 'items.product', 'items.variant'],
+            relations: ['user', 'items', 'items.product', 'items.product.categories', 'items.product.categories.parent', 'items.variant'],
         });
 
         console.log('Order entity:', orderEntity)
@@ -213,17 +213,35 @@ export class PaymentService {
                     zipCode: orderEntity.billingAddress?.postalCode || buyerInfo.zipCode,
                     address: orderEntity.billingAddress?.address || buyerInfo.address,
                 },
-                basketItems: orderEntity.items.map((item) => {
+                basketItems: orderEntity.items.map((item, index) => {
                     // Convert Decimal unitPrice to number
                     const unitPrice = typeof item.unitPrice === 'string'
                         ? parseFloat(item.unitPrice)
                         : Number(item.unitPrice);
+                    
+                    if (isNaN(unitPrice) || unitPrice <= 0) {
+                        throw new BadRequestException(`Invalid unit price for item ${item.productName}`);
+                    }
+
+                    // Get category information from product
+                    const product = item.product;
+                    const categories = product?.categories || [];
+                    // Use first category as category1, or 'Product' as fallback
+                    const category1 = categories[0]?.name || 'Product';
+                    // Use second category, or first category's parent, or undefined
+                    const category2 = categories[1]?.name || categories[0]?.parent?.name || undefined;
+
+                    // Use orderItem.id as basket item ID (Iyzico accepts UUID)
+                    // Iyzico example uses short IDs like "BI101", but UUID should work too
+                    const basketItemId = item.id;
+
                     return {
-                        id: item.productId,
+                        id: basketItemId,
                         name: item.productName,
-                        category1: 'Product',
+                        category1: category1,
+                        ...(category2 && { category2: category2 }),
                         itemType: 'PHYSICAL' as const,
-                        price: unitPrice,
+                        price: unitPrice, // Provider interface expects number, will be converted to string in provider
                     };
                 }),
             });
