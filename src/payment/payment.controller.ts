@@ -5,6 +5,7 @@ import {
     Req,
     Res,
     HttpStatus,
+    Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { PaymentService } from './payment.service';
@@ -14,6 +15,8 @@ import { PaymentProvider } from '../common/enums/payment-provider.enum';
 
 @Controller('payments')
 export class PaymentController {
+    private readonly logger = new Logger(PaymentController.name);
+
     constructor(private readonly paymentService: PaymentService) { }
 
     /**
@@ -21,7 +24,15 @@ export class PaymentController {
      */
     @Post('checkout')
     async checkout(@Body() checkoutDto: CheckoutDto): Promise<CheckoutResponseDto> {
-        return this.paymentService.createCheckout(checkoutDto);
+        this.logger.log(`[checkout] POST /payments/checkout - orderId: ${checkoutDto.orderId}, provider: ${checkoutDto.provider || 'default'}`);
+        try {
+            const result = await this.paymentService.createCheckout(checkoutDto);
+            this.logger.log(`[checkout] Checkout successful - attemptId: ${result.attemptId}, redirectUrl: ${result.redirectUrl?.substring(0, 50)}...`);
+            return result;
+        } catch (error) {
+            this.logger.error(`[checkout] Checkout failed for orderId ${checkoutDto.orderId}: ${error.message}`, error.stack);
+            throw error;
+        }
     }
 
     /**
@@ -30,28 +41,37 @@ export class PaymentController {
      */
     @Post('iyzico/callback')
     async iyzicoCallback(@Req() req: Request, @Res() res: Response): Promise<void> {
+        this.logger.log(`[iyzicoCallback] POST /payments/iyzico/callback received`);
+        this.logger.debug(`[iyzicoCallback] Request body: ${JSON.stringify(req.body)}, query: ${JSON.stringify(req.query)}`);
+
         // Iyzico sends token as form data
         const token = req.body?.token || req.query?.token;
 
+        this.logger.debug(`[iyzicoCallback] Token extracted: ${token ? token.substring(0, 20) + '...' : 'MISSING'}`);
+
         if (!token) {
+            this.logger.error(`[iyzicoCallback] Token is missing in request`);
             res.status(HttpStatus.BAD_REQUEST).send('Token is required');
             return;
         }
 
         try {
+            this.logger.log(`[iyzicoCallback] Processing callback for token: ${token.substring(0, 20)}...`);
             const result = await this.paymentService.handleCallback(
                 token as string,
                 PaymentProvider.IYZICO,
             );
 
+            this.logger.log(`[iyzicoCallback] Callback processed successfully. Redirecting to: ${result.redirectUrl}`);
             // Redirect to frontend
             res.redirect(HttpStatus.FOUND, result.redirectUrl);
         } catch (error) {
+            this.logger.error(`[iyzicoCallback] Error processing callback: ${error.message}`, error.stack);
             const frontendFailUrl = process.env.FRONTEND_FAIL_URL || '';
-            res.redirect(
-                HttpStatus.FOUND,
-                `${frontendFailUrl}?error=${encodeURIComponent(error.message || 'Payment processing failed')}`,
-            );
+            this.logger.debug(`[iyzicoCallback] Frontend fail URL: ${frontendFailUrl}`);
+            const errorUrl = `${frontendFailUrl}?error=${encodeURIComponent(error.message || 'Payment processing failed')}`;
+            this.logger.warn(`[iyzicoCallback] Redirecting to error page: ${errorUrl}`);
+            res.redirect(HttpStatus.FOUND, errorUrl);
         }
     }
 
@@ -60,12 +80,17 @@ export class PaymentController {
      */
     @Post('iyzico/webhook')
     async iyzicoWebhook(@Req() req: Request, @Res() res: Response): Promise<void> {
+        this.logger.log(`[iyzicoWebhook] POST /payments/iyzico/webhook received`);
+        this.logger.debug(`[iyzicoWebhook] Webhook payload: ${JSON.stringify(req.body)}`);
+
         try {
             await this.paymentService.handleWebhook(req.body, PaymentProvider.IYZICO);
+            this.logger.log(`[iyzicoWebhook] Webhook processed successfully`);
             res.status(HttpStatus.OK).send('OK');
         } catch (error) {
             // Log error but return 200 to prevent retries for invalid requests
-            console.error('Webhook error:', error);
+            this.logger.error(`[iyzicoWebhook] Error processing webhook: ${error.message}`, error.stack);
+            this.logger.warn(`[iyzicoWebhook] Returning 200 OK to prevent retries`);
             res.status(HttpStatus.OK).send('OK');
         }
     }

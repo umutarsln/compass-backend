@@ -1,15 +1,19 @@
 import * as crypto from 'crypto';
+import { Logger } from '@nestjs/common';
 import { IyzicoCheckoutFormInitializeRequest, IyzicoCheckoutFormInitializeResponse, IyzicoCheckoutFormRetrieveRequest, IyzicoCheckoutFormRetrieveResponse } from './iyzico.types';
 
 export class IyzicoHttpClient {
+    private readonly logger: Logger;
     private apiKey: string;
     private secretKey: string;
     private baseUrl: string;
 
-    constructor(apiKey: string, secretKey: string, baseUrl: string) {
+    constructor(apiKey: string, secretKey: string, baseUrl: string, logger?: Logger) {
         this.apiKey = apiKey;
         this.secretKey = secretKey;
         this.baseUrl = baseUrl;
+        this.logger = logger || new Logger(IyzicoHttpClient.name);
+        this.logger.debug(`IyzicoHttpClient initialized - baseUrl: ${baseUrl}`);
     }
 
     /**
@@ -67,11 +71,11 @@ export class IyzicoHttpClient {
         const fullUrl = `${this.baseUrl}${endpoint}`;
         const authorization = this.generateAuthorizationHeader(endpoint, bodyString, randomString);
 
-        // Log request for debugging
-        console.log('Iyzico request body:', bodyString);
-        console.log('Iyzico request URL:', fullUrl);
-        console.log('Iyzico random string:', randomString);
-        console.log('Iyzico authorization header:', authorization);
+        this.logger.debug(`[makeRequest] Making request to Iyzico API - endpoint: ${endpoint}`);
+        this.logger.debug(`[makeRequest] Request URL: ${fullUrl}`);
+        this.logger.debug(`[makeRequest] Random string: ${randomString}`);
+        this.logger.debug(`[makeRequest] Request body: ${bodyString}`);
+        this.logger.debug(`[makeRequest] Authorization header: ${authorization.substring(0, 50)}...`);
 
         const response = await fetch(fullUrl, {
             method: 'POST',
@@ -86,10 +90,11 @@ export class IyzicoHttpClient {
         });
 
         const responseText = await response.text();
-        console.log('Iyzico response status:', response.status);
-        console.log('Iyzico response body:', responseText);
+        this.logger.debug(`[makeRequest] Response status: ${response.status} ${response.statusText}`);
+        this.logger.debug(`[makeRequest] Response body: ${responseText}`);
 
         if (!response.ok) {
+            this.logger.error(`[makeRequest] HTTP error: ${response.status} ${response.statusText}`);
             throw new Error(`Iyzico API error: ${response.status} ${response.statusText}`);
         }
 
@@ -97,19 +102,21 @@ export class IyzicoHttpClient {
         try {
             data = JSON.parse(responseText);
         } catch (error) {
-            console.error('Failed to parse Iyzico response:', responseText);
+            this.logger.error(`[makeRequest] Failed to parse Iyzico response: ${responseText}`, error.stack);
             throw new Error(`Iyzico response parse error: ${error.message}`);
         }
 
         if (data.status === 'failure') {
             // Log detailed error information
-            console.error('Iyzico API error response:', JSON.stringify(data, null, 2));
+            this.logger.error(`[makeRequest] Iyzico API error response: ${JSON.stringify(data, null, 2)}`);
             const errorMessage = data.errorMessage || data.errorCode || 'Unknown error';
             const errorGroup = data.errorGroup || '';
             const errorCode = data.errorCode || '';
+            this.logger.error(`[makeRequest] Iyzico error - Code: ${errorCode}, Message: ${errorMessage}, Group: ${errorGroup}`);
             throw new Error(`Iyzico error: ${errorMessage}${errorCode ? ` (Code: ${errorCode})` : ''}${errorGroup ? ` (Group: ${errorGroup})` : ''}`);
         }
 
+        this.logger.debug(`[makeRequest] Request successful - status: ${data.status}`);
         return data as T;
     }
 
@@ -120,6 +127,7 @@ export class IyzicoHttpClient {
     async initializeCheckoutForm(
         request: IyzicoCheckoutFormInitializeRequest,
     ): Promise<IyzicoCheckoutFormInitializeResponse> {
+        this.logger.log(`[initializeCheckoutForm] Initializing checkout form - conversationId: ${request.conversationId}, basketId: ${request.basketId}`);
         return this.makeRequest<IyzicoCheckoutFormInitializeResponse>(
             '/payment/iyzipos/checkoutform/initialize/ecom',
             request,
@@ -132,6 +140,7 @@ export class IyzicoHttpClient {
     async retrieveCheckoutForm(
         request: IyzicoCheckoutFormRetrieveRequest,
     ): Promise<IyzicoCheckoutFormRetrieveResponse> {
+        this.logger.log(`[retrieveCheckoutForm] Retrieving checkout form - token: ${request.token.substring(0, 20)}...`);
         return this.makeRequest<IyzicoCheckoutFormRetrieveResponse>(
             '/payment/checkoutform/auth/ecom/detail',
             request,
