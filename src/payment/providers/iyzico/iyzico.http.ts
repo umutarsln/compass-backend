@@ -13,21 +13,45 @@ export class IyzicoHttpClient {
     }
 
     /**
-     * Generate Iyzico authorization header
-     * Format: IYZWS apiKey:hash
-     * Hash = SHA256(apiKey + randomString + secretKey + requestBody) in base64
+     * Generate Iyzico authorization header (IYZWSv2 format)
+     * Based on Python SDK implementation
+     * Format: IYZWSv2 {base64(apiKey:{apiKey}&randomKey:{randomStr}&signature:{signature})}
+     * Signature = HMAC-SHA256(randomStr + url + bodyStr, secretKey)
      */
-    private generateAuthorizationHeader(requestBody: string, randomString: string): string {
-        const dataToEncrypt = this.apiKey + randomString + this.secretKey + requestBody;
-        const hash = crypto.createHash('sha256').update(dataToEncrypt).digest('base64');
-        return `IYZWS ${this.apiKey}:${hash}`;
+    private generateAuthorizationHeader(url: string, requestBody: string, randomString: string): string {
+        // Remove query parameters from URL for signature calculation
+        const cleanUrl = url.split('?')[0];
+        
+        // Calculate HMAC-SHA256 signature
+        const message = (randomString + cleanUrl + requestBody).toString();
+        const signature = crypto
+            .createHmac('sha256', this.secretKey)
+            .update(message)
+            .digest('hex');
+        
+        // Build authorization params string
+        const authParams = [
+            `apiKey:${this.apiKey}`,
+            `randomKey:${randomString}`,
+            `signature:${signature}`
+        ].join('&');
+        
+        // Base64 encode the authorization params
+        const encodedAuth = Buffer.from(authParams).toString('base64');
+        
+        return `IYZWSv2 ${encodedAuth}`;
     }
 
     /**
-     * Generate random string for authorization
+     * Generate random string for authorization (8 characters like Python SDK)
      */
     private generateRandomString(): string {
-        return crypto.randomBytes(16).toString('base64');
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        for (let i = 0; i < 8; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
     }
 
     /**
@@ -40,17 +64,19 @@ export class IyzicoHttpClient {
         const bodyString = JSON.stringify(requestBody);
         // Generate random string once and use it for both authorization and header
         const randomString = this.generateRandomString();
-        const authorization = this.generateAuthorizationHeader(bodyString, randomString);
+        const fullUrl = `${this.baseUrl}${endpoint}`;
+        const authorization = this.generateAuthorizationHeader(endpoint, bodyString, randomString);
 
         // Log request for debugging
         console.log('Iyzico request body:', bodyString);
-        console.log('Iyzico request URL:', `${this.baseUrl}${endpoint}`);
+        console.log('Iyzico request URL:', fullUrl);
         console.log('Iyzico random string:', randomString);
         console.log('Iyzico authorization header:', authorization);
 
-        const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        const response = await fetch(fullUrl, {
             method: 'POST',
             headers: {
+                'Accept': 'application/json',
                 'Content-Type': 'application/json',
                 'Authorization': authorization,
                 'x-iyzi-rnd': randomString,
@@ -89,12 +115,13 @@ export class IyzicoHttpClient {
 
     /**
      * Initialize checkout form
+     * Endpoint matches Python SDK: /payment/iyzipos/checkoutform/initialize/ecom
      */
     async initializeCheckoutForm(
         request: IyzicoCheckoutFormInitializeRequest,
     ): Promise<IyzicoCheckoutFormInitializeResponse> {
         return this.makeRequest<IyzicoCheckoutFormInitializeResponse>(
-            '/payment/checkoutform/initialize',
+            '/payment/iyzipos/checkoutform/initialize/ecom',
             request,
         );
     }

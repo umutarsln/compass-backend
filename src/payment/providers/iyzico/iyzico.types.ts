@@ -1,13 +1,13 @@
 export interface IyzicoCheckoutFormInitializeRequest {
     locale: string;
     conversationId: string;
-    price: string;
-    paidPrice: string;
+    price: string; // String format as per Python SDK example
+    paidPrice: string; // String format as per Python SDK example
     currency: string;
     basketId: string;
     paymentGroup?: string;
     callbackUrl: string;
-    enabledInstallments?: number[];
+    enabledInstallments?: string[];
     buyer: {
         id?: string;
         name: string;
@@ -43,7 +43,7 @@ export interface IyzicoCheckoutFormInitializeRequest {
         category1?: string;
         category2?: string;
         itemType: 'PHYSICAL' | 'VIRTUAL';
-        price: string;
+        price: string; // String format as per Python SDK example
     }>;
 }
 

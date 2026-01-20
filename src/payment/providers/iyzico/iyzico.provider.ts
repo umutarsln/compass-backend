@@ -35,6 +35,43 @@ export class IyzicoProvider implements PaymentProvider {
         this.webhookUrl = `${appPublicUrl}${webhookPath}`;
     }
 
+    /**
+     * Normalize country code to Iyzico format (full country name)
+     * Iyzico expects "Turkey" instead of "TR"
+     */
+    private normalizeCountry(country: string): string {
+        const countryMap: Record<string, string> = {
+            'TR': 'Turkey',
+            'US': 'United States',
+            'GB': 'United Kingdom',
+            'DE': 'Germany',
+            'FR': 'France',
+            'IT': 'Italy',
+            'ES': 'Spain',
+            'NL': 'Netherlands',
+            'BE': 'Belgium',
+            'AT': 'Austria',
+            'CH': 'Switzerland',
+            'SE': 'Sweden',
+            'NO': 'Norway',
+            'DK': 'Denmark',
+            'FI': 'Finland',
+            'PL': 'Poland',
+            'CZ': 'Czech Republic',
+            'GR': 'Greece',
+            'PT': 'Portugal',
+            'IE': 'Ireland',
+        };
+        
+        // If already a full country name, return as is
+        if (country.length > 2) {
+            return country;
+        }
+        
+        // Convert ISO code to full country name
+        return countryMap[country.toUpperCase()] || country;
+    }
+
     async initializeCheckout(input: InitializeCheckoutInput): Promise<{
         token: string;
         redirectUrl: string;
@@ -57,23 +94,26 @@ export class IyzicoProvider implements PaymentProvider {
             throw new Error('Billing address fields are required');
         }
 
-        // Ensure amount is a number
+        // Ensure amount is a number, then convert to string with 2 decimal places
         const amount = typeof input.amount === 'string' ? parseFloat(input.amount) : Number(input.amount);
 
         if (isNaN(amount) || amount <= 0) {
             throw new Error('Invalid amount: amount must be a positive number');
         }
 
+        // Format price as string with 2 decimal places (matching Python SDK format)
+        const priceString = amount.toFixed(2);
+
         const request: IyzicoCheckoutFormInitializeRequest = {
             locale: 'tr',
             conversationId: input.conversationId,
-            price: amount.toFixed(2),
-            paidPrice: amount.toFixed(2),
+            price: priceString,
+            paidPrice: priceString,
             currency: input.currency,
             basketId: input.orderId,
             paymentGroup: 'PRODUCT', // Iyzico example shows this field
             callbackUrl: input.callbackUrl || this.callbackUrl,
-            enabledInstallments: [1, 2, 3, 4, 6, 9, 12], // Common installments for Turkey
+            enabledInstallments: ['2', '3', '6', '9', '12'], // Common installments for Turkey (as strings per Iyzico Python example)
             buyer: {
                 ...(input.buyerInfo.id && { id: input.buyerInfo.id }),
                 name: input.buyerInfo.name,
@@ -82,36 +122,38 @@ export class IyzicoProvider implements PaymentProvider {
                 email: input.buyerInfo.email,
                 ...(input.buyerInfo.identityNumber && { identityNumber: input.buyerInfo.identityNumber }),
                 ...(input.buyerInfo.city && { city: input.buyerInfo.city }),
-                ...(input.buyerInfo.country && { country: input.buyerInfo.country }),
+                country: this.normalizeCountry(input.buyerInfo.country || 'TR'),
                 ...(input.buyerInfo.zipCode && { zipCode: input.buyerInfo.zipCode }),
             },
             shippingAddress: {
                 contactName: input.shippingAddress.contactName,
                 city: input.shippingAddress.city,
-                country: input.shippingAddress.country || 'TR',
+                country: this.normalizeCountry(input.shippingAddress.country || 'TR'),
                 address: input.shippingAddress.address,
                 zipCode: input.shippingAddress.zipCode,
             },
             billingAddress: {
                 contactName: input.billingAddress.contactName,
                 city: input.billingAddress.city,
-                country: input.billingAddress.country || 'TR',
+                country: this.normalizeCountry(input.billingAddress.country || 'TR'),
                 address: input.billingAddress.address,
                 zipCode: input.billingAddress.zipCode,
             },
             basketItems: input.basketItems.map((item) => {
-                // Ensure price is a number
+                // Ensure price is a number, then convert to string with 2 decimal places
                 const itemPrice = typeof item.price === 'string' ? parseFloat(item.price) : Number(item.price);
                 if (isNaN(itemPrice) || itemPrice <= 0) {
                     throw new Error(`Invalid item price for ${item.name}: price must be a positive number`);
                 }
+                // Format price as string with 2 decimal places (matching Python SDK format)
+                const priceString = itemPrice.toFixed(2);
                 return {
                     id: item.id,
                     name: item.name,
                     category1: item.category1 || 'Product',
                     ...(item.category2 && { category2: item.category2 }),
                     itemType: item.itemType,
-                    price: itemPrice.toFixed(2),
+                    price: priceString, // Send as string, matching Python SDK format
                 };
             }),
         };
