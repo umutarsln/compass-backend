@@ -17,6 +17,7 @@ import { OrderResponseDto } from './dto/order-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { Role } from '../common/enums/role.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 
@@ -41,10 +42,12 @@ export class OrderController {
      * Public endpoint - allows guest users to access their orders
      */
     @Get(':id')
+    @Public()
     async getOrder(
         @Param('id') id: string,
         @Request() req: any,
     ): Promise<OrderResponseDto> {
+        // Try to get userId from token if present (optional auth)
         const userId = req.user?.userId || req.user?.id || null;
 
         // Check if id is 8 digits (orderNo) or UUID (orderId)

@@ -121,11 +121,16 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'GET /store/categories': [], // Public - Hiyerarşik ve orderlanmış kategoriler
     'GET /store/tags': [], // Public - Tag'ler renkleriyle birlikte
 
+    // Order Endpoints
+    'POST /orders': [], // Public - Guest ve authenticated kullanıcılar sipariş oluşturabilir
+    'GET /orders/:id': [], // Public - Guest ve authenticated kullanıcılar siparişlerini görebilir (orderId veya orderNo ile)
+    'GET /orders/me/orders': [Role.USER, Role.ADMIN], // Authenticated kullanıcılar kendi siparişlerini görebilir
+    'GET /orders': [Role.ADMIN], // Sadece admin tüm siparişleri görebilir
+    'PATCH /orders/:id/status': [Role.ADMIN], // Sadece admin sipariş durumunu güncelleyebilir
+
     // Gelecekte eklenecek endpoint'ler için örnekler:
     // 'GET /products': [], // Public
     // 'POST /products': [Role.ADMIN],
-    // 'GET /orders': [Role.USER, Role.ADMIN],
-    // 'POST /orders': [Role.USER, Role.ADMIN],
     // 'GET /admin/stats': [Role.ADMIN],
 };
 
