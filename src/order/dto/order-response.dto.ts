@@ -12,6 +12,41 @@ export class OrderItemResponseDto {
   totalPrice: number;
   currency: Currency;
   createdAt: Date;
+  product?: {
+    id: string;
+    slug: string;
+    galleries?: Array<{
+      mainImage?: {
+        id: string;
+        s3Url: string;
+        filename: string;
+        displayName: string | null;
+      } | null;
+      thumbnailImage?: {
+        id: string;
+        s3Url: string;
+        filename: string;
+        displayName: string | null;
+      } | null;
+    }>;
+  } | null;
+  variant?: {
+    id: string;
+    galleries?: Array<{
+      mainImage?: {
+        id: string;
+        s3Url: string;
+        filename: string;
+        displayName: string | null;
+      } | null;
+      thumbnailImage?: {
+        id: string;
+        s3Url: string;
+        filename: string;
+        displayName: string | null;
+      } | null;
+    }>;
+  } | null;
 }
 
 export class OrderResponseDto {

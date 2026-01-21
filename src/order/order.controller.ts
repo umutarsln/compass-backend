@@ -81,11 +81,17 @@ export class OrderController {
         @Query('status') status?: OrderStatus,
         @Query('limit') limit?: string,
         @Query('offset') offset?: string,
+        @Query('search') search?: string,
+        @Query('sortBy') sortBy?: string,
+        @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
     ): Promise<{ orders: OrderResponseDto[]; total: number }> {
         return this.orderService.getAllOrders(
             status,
             limit ? parseInt(limit, 10) : 50,
             offset ? parseInt(offset, 10) : 0,
+            search,
+            sortBy,
+            sortOrder || 'DESC',
         );
     }
 

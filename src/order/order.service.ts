@@ -178,7 +178,17 @@ export class OrderService {
    * Get order by ID
    */
   async getOrder(orderId: string, userId?: string | null, includeUser: boolean = false): Promise<OrderResponseDto> {
-    const relations = ['items', 'items.product', 'items.variant'];
+    const relations = [
+      'items',
+      'items.product',
+      'items.product.galleries',
+      'items.product.galleries.mainImage',
+      'items.product.galleries.thumbnailImage',
+      'items.variant',
+      'items.variant.galleries',
+      'items.variant.galleries.mainImage',
+      'items.variant.galleries.thumbnailImage',
+    ];
     if (includeUser) {
       relations.push('user');
     }
@@ -213,7 +223,17 @@ export class OrderService {
 
     const order = await this.orderRepository.findOne({
       where: { orderNo },
-      relations: ['items', 'items.product', 'items.variant'],
+      relations: [
+        'items',
+        'items.product',
+        'items.product.galleries',
+        'items.product.galleries.mainImage',
+        'items.product.galleries.thumbnailImage',
+        'items.variant',
+        'items.variant.galleries',
+        'items.variant.galleries.mainImage',
+        'items.variant.galleries.thumbnailImage',
+      ],
     });
 
     if (!order) {
@@ -256,19 +276,57 @@ export class OrderService {
     status?: OrderStatus,
     limit: number = 50,
     offset: number = 0,
+    search?: string,
+    sortBy?: string,
+    sortOrder: 'ASC' | 'DESC' = 'DESC',
   ): Promise<{ orders: OrderResponseDto[]; total: number }> {
-    const where: any = {};
+    const queryBuilder = this.orderRepository
+      .createQueryBuilder('order')
+      .leftJoinAndSelect('order.items', 'items')
+      .leftJoinAndSelect('items.product', 'product')
+      .leftJoinAndSelect('items.variant', 'variant')
+      .leftJoinAndSelect('order.user', 'user');
+
+    // Status filter
     if (status) {
-      where.status = status;
+      queryBuilder.andWhere('order.status = :status', { status });
     }
 
-    const [orders, total] = await this.orderRepository.findAndCount({
-      where,
-      relations: ['items', 'items.product', 'items.variant', 'user'],
-      order: { createdAt: 'DESC' },
-      take: limit,
-      skip: offset,
-    });
+    // Search filter - müşteri bilgileriyle arama
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim()}%`;
+      queryBuilder.andWhere(
+        '(order.orderNo ILIKE :search OR ' +
+        'order.guestEmail ILIKE :search OR ' +
+        'order.guestPhone ILIKE :search OR ' +
+        'order.guestFirstName ILIKE :search OR ' +
+        'order.guestLastName ILIKE :search OR ' +
+        'user.email ILIKE :search OR ' +
+        'user.phone ILIKE :search OR ' +
+        'user.firstname ILIKE :search OR ' +
+        'user.lastname ILIKE :search OR ' +
+        'CAST(order.shippingAddress AS TEXT) ILIKE :search OR ' +
+        'CAST(order.billingAddress AS TEXT) ILIKE :search)',
+        { search: searchTerm },
+      );
+    }
+
+    // Sorting
+    const validSortFields: Record<string, string> = {
+      createdAt: 'order.createdAt',
+      updatedAt: 'order.updatedAt',
+      total: 'order.total',
+      status: 'order.status',
+      orderNo: 'order.orderNo',
+    };
+
+    const sortField = sortBy && validSortFields[sortBy] ? validSortFields[sortBy] : 'order.createdAt';
+    queryBuilder.orderBy(sortField, sortOrder);
+
+    // Pagination
+    queryBuilder.take(limit).skip(offset);
+
+    const [orders, total] = await queryBuilder.getManyAndCount();
 
     return {
       orders: orders.map((order) => this.mapToResponseDto(order)),
@@ -346,18 +404,65 @@ export class OrderService {
       shippingAddress: order.shippingAddress,
       billingAddress: order.billingAddress,
       notes: order.notes,
-      items: order.items?.map((item) => ({
-        id: item.id,
-        productId: item.productId,
-        variantId: item.variantId,
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: Number(item.unitPrice),
-        discountedPrice: item.discountedPrice ? Number(item.discountedPrice) : null,
-        totalPrice: Number(item.totalPrice),
-        currency: item.currency,
-        createdAt: item.createdAt,
-      })) || [],
+      items: order.items?.map((item) => {
+        const itemDto: any = {
+          id: item.id,
+          productId: item.productId,
+          variantId: item.variantId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: Number(item.unitPrice),
+          discountedPrice: item.discountedPrice ? Number(item.discountedPrice) : null,
+          totalPrice: Number(item.totalPrice),
+          currency: item.currency,
+          createdAt: item.createdAt,
+        };
+
+        // Product bilgilerini ekle (slug ve gallery)
+        if (item.product) {
+          itemDto.product = {
+            id: item.product.id,
+            slug: item.product.slug,
+            galleries: item.product.galleries?.map((gallery) => ({
+              mainImage: gallery.mainImage ? {
+                id: gallery.mainImage.id,
+                s3Url: gallery.mainImage.s3Url,
+                filename: gallery.mainImage.filename,
+                displayName: gallery.mainImage.displayName,
+              } : null,
+              thumbnailImage: gallery.thumbnailImage ? {
+                id: gallery.thumbnailImage.id,
+                s3Url: gallery.thumbnailImage.s3Url,
+                filename: gallery.thumbnailImage.filename,
+                displayName: gallery.thumbnailImage.displayName,
+              } : null,
+            })) || [],
+          };
+        }
+
+        // Variant bilgilerini ekle (gallery)
+        if (item.variant) {
+          itemDto.variant = {
+            id: item.variant.id,
+            galleries: item.variant.galleries?.map((gallery) => ({
+              mainImage: gallery.mainImage ? {
+                id: gallery.mainImage.id,
+                s3Url: gallery.mainImage.s3Url,
+                filename: gallery.mainImage.filename,
+                displayName: gallery.mainImage.displayName,
+              } : null,
+              thumbnailImage: gallery.thumbnailImage ? {
+                id: gallery.thumbnailImage.id,
+                s3Url: gallery.thumbnailImage.s3Url,
+                filename: gallery.thumbnailImage.filename,
+                displayName: gallery.thumbnailImage.displayName,
+              } : null,
+            })) || [],
+          };
+        }
+
+        return itemDto;
+      }) || [],
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
     };
