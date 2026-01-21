@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { MailerModule } from '@nestjs-modules/mailer';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { google } from 'googleapis';
 import { MailService } from './mail.service';
-
 @Module({
   imports: [
     MailerModule.forRootAsync({
@@ -45,4 +45,4 @@ import { MailService } from './mail.service';
   providers: [MailService],
   exports: [MailService],
 })
-export class MailModule {}
+export class MailModule { }

@@ -421,6 +421,13 @@ export class PaymentService {
 
                 // Send success email
                 try {
+                    this.logger.log(`[handleCallback] Preparing to send success email for order ${order.orderNo}...`);
+                    this.logger.debug(`[handleCallback] Order userId: ${order.userId}, user: ${order.user ? 'loaded' : 'not loaded'}, guestEmail: ${order.guestEmail || 'null'}`);
+
+                    if (order.user) {
+                        this.logger.debug(`[handleCallback] User email: ${order.user.email || 'null'}`);
+                    }
+
                     const itemsWithImages: OrderItemWithImage[] = order.items.map((item) => {
                         // Get product image from gallery
                         let imageUrl: string | null = null;
@@ -467,10 +474,12 @@ export class PaymentService {
                         };
                     });
 
+                    this.logger.log(`[handleCallback] Calling mailService.sendOrderSuccessEmail for order ${order.orderNo}...`);
                     await this.mailService.sendOrderSuccessEmail(order, itemsWithImages);
-                    this.logger.log(`[handleCallback] Success email sent for order ${order.orderNo}`);
+                    this.logger.log(`[handleCallback] Success email sent successfully for order ${order.orderNo}`);
                 } catch (error) {
-                    this.logger.error(`[handleCallback] Failed to send success email: ${error.message}`, error.stack);
+                    this.logger.error(`[handleCallback] Failed to send success email for order ${order.orderNo}: ${error.message}`, error.stack);
+                    this.logger.error(`[handleCallback] Error details: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
                     // Don't throw, just log the error
                 }
             } else {

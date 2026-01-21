@@ -141,17 +141,23 @@ export class MailService {
     itemsWithImages: OrderItemWithImage[],
   ): Promise<void> {
     try {
+      this.logger.log(`[sendOrderSuccessEmail] Starting email send for order ${order.orderNo} (${order.id})`);
+      this.logger.debug(`[sendOrderSuccessEmail] Order userId: ${order.userId}, user loaded: ${order.user ? 'yes' : 'no'}, guestEmail: ${order.guestEmail || 'null'}`);
+
       const recipientEmail = order.userId
         ? order.user?.email
         : order.guestEmail;
 
+      this.logger.debug(`[sendOrderSuccessEmail] Recipient email determined: ${recipientEmail || 'null'}`);
+
       if (!recipientEmail) {
         this.logger.warn(
-          `[sendOrderSuccessEmail] No email found for order ${order.id}`,
+          `[sendOrderSuccessEmail] No email found for order ${order.id} (orderNo: ${order.orderNo}). userId: ${order.userId}, user.email: ${order.user?.email || 'null'}, guestEmail: ${order.guestEmail || 'null'}`,
         );
         return;
       }
 
+      this.logger.log(`[sendOrderSuccessEmail] Generating HTML template for order ${order.orderNo}...`);
       const html = generateOrderSuccessEmailHtml(
         order,
         itemsWithImages,
@@ -159,6 +165,7 @@ export class MailService {
       );
 
       const subject = `Sipariş Onayı - ${order.orderNo}`;
+      this.logger.log(`[sendOrderSuccessEmail] Sending email to ${recipientEmail} with subject: ${subject}`);
 
       await this.sendMail({
         to: recipientEmail,
@@ -168,12 +175,15 @@ export class MailService {
       });
 
       this.logger.log(
-        `[sendOrderSuccessEmail] Order success email sent to ${recipientEmail} for order ${order.orderNo}`,
+        `[sendOrderSuccessEmail] Order success email sent successfully to ${recipientEmail} for order ${order.orderNo}`,
       );
     } catch (error) {
       this.logger.error(
-        `[sendOrderSuccessEmail] Failed to send order success email: ${error.message}`,
+        `[sendOrderSuccessEmail] Failed to send order success email for order ${order.orderNo}: ${error.message}`,
         error.stack,
+      );
+      this.logger.error(
+        `[sendOrderSuccessEmail] Error details: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`,
       );
       throw error;
     }
