@@ -38,6 +38,7 @@ export class OrderController {
 
     /**
      * Get order by ID or order number
+     * Public endpoint - allows guest users to access their orders
      */
     @Get(':id')
     async getOrder(
@@ -45,17 +46,14 @@ export class OrderController {
         @Request() req: any,
     ): Promise<OrderResponseDto> {
         const userId = req.user?.userId || req.user?.id || null;
-        
+
         // Check if id is 8 digits (orderNo) or UUID (orderId)
         const isOrderNo = /^\d{8}$/.test(id);
-        
+
         if (isOrderNo) {
             return this.orderService.getOrderByOrderNo(id, userId);
         } else {
-            // For UUID, require authentication
-            if (!userId) {
-                throw new ForbiddenException('Authentication required to access order by ID');
-            }
+            // For UUID, allow both authenticated and guest access
             return this.orderService.getOrder(id, userId);
         }
     }

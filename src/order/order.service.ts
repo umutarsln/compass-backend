@@ -192,11 +192,16 @@ export class OrderService {
       throw new NotFoundException('Order not found');
     }
 
-    // Check access: user can only see their own orders, or admin can see all
-    if (userId && order.userId && order.userId !== userId) {
+    // Check access:
+    // - Guest orders (order.userId is null) are publicly accessible
+    // - Authenticated orders: only the owner can access, unless userId matches
+    if (order.userId && userId && order.userId !== userId) {
+      this.logger.warn(`[getOrder] Access denied for order ${orderId}: userId ${userId} does not match order.userId ${order.userId}`);
       throw new ForbiddenException('You do not have access to this order');
     }
 
+    // Guest orders are accessible without authentication
+    this.logger.debug(`[getOrder] Order ${orderId} accessed - isGuest: ${!order.userId}, requestUserId: ${userId || 'guest'}`);
     return this.mapToResponseDto(order);
   }
 
@@ -216,12 +221,16 @@ export class OrderService {
       throw new NotFoundException('Order not found');
     }
 
-    // Check access: user can only see their own orders, or admin can see all
-    // For guest orders, allow access if email matches
-    if (userId && order.userId && order.userId !== userId) {
-      this.logger.warn(`[getOrderByOrderNo] Access denied for orderNo: ${orderNo}, userId: ${userId}`);
+    // Check access:
+    // - Guest orders (order.userId is null) are publicly accessible
+    // - Authenticated orders: only the owner can access, unless userId matches
+    if (order.userId && userId && order.userId !== userId) {
+      this.logger.warn(`[getOrderByOrderNo] Access denied for orderNo: ${orderNo}, userId: ${userId} does not match order.userId: ${order.userId}`);
       throw new ForbiddenException('You do not have access to this order');
     }
+
+    // Guest orders are accessible without authentication
+    this.logger.debug(`[getOrderByOrderNo] Order ${order.orderNo} accessed - isGuest: ${!order.userId}, requestUserId: ${userId || 'guest'}`);
 
     this.logger.log(`[getOrderByOrderNo] Order found: ${order.id}, orderNo: ${order.orderNo}`);
     return this.mapToResponseDto(order);

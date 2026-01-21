@@ -16,6 +16,7 @@ import { CartModule } from './cart/cart.module';
 import { FavoriteModule } from './favorite/favorite.module';
 import { OrderModule } from './order/order.module';
 import { PaymentModule } from './payment/payment.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { PaymentModule } from './payment/payment.module';
     FavoriteModule,
     OrderModule,
     PaymentModule,
+    MailModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -17,6 +17,8 @@ import { CheckoutDto } from './dto/checkout.dto';
 import { CheckoutResponseDto } from './dto/checkout-response.dto';
 import { PaymentProvider as PaymentProviderInterface } from './providers/payment-provider.interface';
 import { IyzicoProvider } from './providers/iyzico/iyzico.provider';
+import { CartService } from '../cart/cart.service';
+import { MailService, OrderItemWithImage } from '../mail/mail.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -30,6 +32,8 @@ export class PaymentService {
         @InjectRepository(Order)
         private orderRepository: Repository<Order>,
         private orderService: OrderService,
+        private cartService: CartService,
+        private mailService: MailService,
         private configService: ConfigService,
         private iyzicoProvider: IyzicoProvider,
     ) {
@@ -369,7 +373,31 @@ export class PaymentService {
             await this.paymentAttemptRepository.save(attempt);
             this.logger.log(`[handleCallback] Payment attempt ${attempt.id} status updated from ${previousStatus} to ${attempt.status}`);
 
-            // If successful, mark order as paid
+            // Get order with all relations for email
+            const order = await this.orderRepository.findOne({
+                where: { id: attempt.orderId },
+                relations: [
+                    'user',
+                    'items',
+                    'items.product',
+                    'items.product.galleries',
+                    'items.product.galleries.mainImage',
+                    'items.product.galleries.thumbnailImage',
+                    'items.variant',
+                    'items.variant.galleries',
+                    'items.variant.galleries.mainImage',
+                    'items.variant.galleries.thumbnailImage',
+                    'items.variant.variantValues',
+                    'items.variant.variantValues.variantOption',
+                ],
+            });
+
+            if (!order) {
+                this.logger.error(`[handleCallback] Order not found: ${attempt.orderId}`);
+                throw new NotFoundException('Order not found');
+            }
+
+            // If successful, mark order as paid and clear cart
             if (result.status === 'SUCCESS') {
                 this.logger.log(`[handleCallback] Marking order ${attempt.orderId} as paid...`);
                 await this.orderService.markOrderAsPaid(
@@ -378,6 +406,94 @@ export class PaymentService {
                     attempt.id,
                 );
                 this.logger.log(`[handleCallback] Order ${attempt.orderId} marked as paid successfully`);
+
+                // Clear cart after successful payment
+                if (order.cartId) {
+                    this.logger.log(`[handleCallback] Clearing cart ${order.cartId} after successful payment...`);
+                    try {
+                        await this.cartService.clearCart(order.cartId);
+                        this.logger.log(`[handleCallback] Cart ${order.cartId} cleared successfully`);
+                    } catch (error) {
+                        this.logger.error(`[handleCallback] Failed to clear cart ${order.cartId}: ${error.message}`, error.stack);
+                        // Don't throw, just log the error
+                    }
+                }
+
+                // Send success email
+                try {
+                    const itemsWithImages: OrderItemWithImage[] = order.items.map((item) => {
+                        // Get product image from gallery
+                        let imageUrl: string | null = null;
+                        let imageAlt: string = item.productName;
+
+                        if (item.variant && item.variant.galleries && item.variant.galleries.length > 0) {
+                            const gallery = item.variant.galleries[0];
+                            imageUrl = gallery.thumbnailImage?.s3Url || gallery.mainImage?.s3Url || null;
+                        } else if (item.product && item.product.galleries && item.product.galleries.length > 0) {
+                            const gallery = item.product.galleries[0];
+                            imageUrl = gallery.thumbnailImage?.s3Url || gallery.mainImage?.s3Url || null;
+                        }
+
+                        // Get variant values
+                        const variantValues =
+                            item.variant && item.variant.variantValues
+                                ? item.variant.variantValues.map((vv) => ({
+                                    value: vv.value,
+                                    variantOption: vv.variantOption
+                                        ? {
+                                            name: vv.variantOption.name,
+                                            type: vv.variantOption.type as 'COLOR' | 'TEXT',
+                                        }
+                                        : null,
+                                    colorCode: vv.colorCode || null,
+                                }))
+                                : undefined;
+
+                        return {
+                            id: item.id,
+                            productName: item.productName,
+                            quantity: item.quantity,
+                            unitPrice: Number(item.unitPrice),
+                            discountedPrice: item.discountedPrice ? Number(item.discountedPrice) : null,
+                            totalPrice: Number(item.totalPrice),
+                            currency: item.currency,
+                            image: imageUrl
+                                ? {
+                                    url: imageUrl,
+                                    alt: imageAlt,
+                                }
+                                : null,
+                            variantValues,
+                        };
+                    });
+
+                    await this.mailService.sendOrderSuccessEmail(order, itemsWithImages);
+                    this.logger.log(`[handleCallback] Success email sent for order ${order.orderNo}`);
+                } catch (error) {
+                    this.logger.error(`[handleCallback] Failed to send success email: ${error.message}`, error.stack);
+                    // Don't throw, just log the error
+                }
+            } else {
+                // If payment failed, reactivate cart
+                if (order.cartId) {
+                    this.logger.log(`[handleCallback] Reactivating cart ${order.cartId} after payment failure...`);
+                    try {
+                        await this.cartService.reactivateCart(order.cartId);
+                        this.logger.log(`[handleCallback] Cart ${order.cartId} reactivated successfully`);
+                    } catch (error) {
+                        this.logger.error(`[handleCallback] Failed to reactivate cart ${order.cartId}: ${error.message}`, error.stack);
+                        // Don't throw, just log the error
+                    }
+                }
+
+                // Send failed email
+                try {
+                    await this.mailService.sendOrderFailedEmail(order, result.errorMessage || null);
+                    this.logger.log(`[handleCallback] Failed email sent for order ${order.orderNo}`);
+                } catch (error) {
+                    this.logger.error(`[handleCallback] Failed to send failed email: ${error.message}`, error.stack);
+                    // Don't throw, just log the error
+                }
             }
 
             // Get redirect URLs

@@ -391,4 +391,43 @@ export class CartService {
             return finalCart;
         });
     }
+
+    /**
+     * Clear cart items (used after successful payment)
+     */
+    async clearCart(cartId: string): Promise<void> {
+        const cart = await this.cartRepository.findOne({
+            where: { id: cartId },
+            relations: ['items'],
+        });
+
+        if (!cart) {
+            return; // Cart not found, nothing to clear
+        }
+
+        // Delete all cart items
+        if (cart.items && cart.items.length > 0) {
+            await this.cartItemRepository.remove(cart.items);
+        }
+
+        // Optionally, you can also delete the cart or keep it empty
+        // For now, we'll keep the cart but it will be empty
+    }
+
+    /**
+     * Reactivate cart (used when payment fails)
+     * Changes cart status from ORDERED back to ACTIVE
+     */
+    async reactivateCart(cartId: string): Promise<Cart> {
+        const cart = await this.cartRepository.findOne({
+            where: { id: cartId },
+        });
+
+        if (!cart) {
+            throw new NotFoundException('Cart not found');
+        }
+
+        cart.status = CartStatus.ACTIVE;
+        return await this.cartRepository.save(cart);
+    }
 }
