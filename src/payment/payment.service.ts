@@ -214,7 +214,7 @@ export class PaymentService {
 
             // Initialize checkout
             // Convert Decimal values to numbers
-            const totalAmount = typeof orderEntity.total === 'string'
+            let totalAmount = typeof orderEntity.total === 'string'
                 ? parseFloat(orderEntity.total)
                 : Number(orderEntity.total);
 
@@ -223,14 +223,15 @@ export class PaymentService {
             // Prepare basket items
             this.logger.debug(`[createCheckout] Preparing ${orderEntity.items.length} basket items...`);
             const basketItems = orderEntity.items.map((item, index) => {
-                // Convert Decimal unitPrice to number
-                const unitPrice = typeof item.unitPrice === 'string'
-                    ? parseFloat(item.unitPrice)
-                    : Number(item.unitPrice);
+                // Iyzico requires basketItems[].price to be the total price for that item
+                // Use item.totalPrice which is already calculated (unitPrice * quantity or discountedPrice * quantity)
+                const itemTotalPrice = typeof item.totalPrice === 'string'
+                    ? parseFloat(item.totalPrice)
+                    : Number(item.totalPrice);
 
-                if (isNaN(unitPrice) || unitPrice <= 0) {
-                    this.logger.error(`[createCheckout] Invalid unit price for item ${item.productName}: ${item.unitPrice}`);
-                    throw new BadRequestException(`Invalid unit price for item ${item.productName}`);
+                if (isNaN(itemTotalPrice) || itemTotalPrice <= 0) {
+                    this.logger.error(`[createCheckout] Invalid total price for item ${item.productName}: ${item.totalPrice}`);
+                    throw new BadRequestException(`Invalid total price for item ${item.productName}`);
                 }
 
                 // Get category information from product
@@ -245,7 +246,7 @@ export class PaymentService {
                 // Iyzico example uses short IDs like "BI101", but UUID should work too
                 const basketItemId = item.id;
 
-                this.logger.debug(`[createCheckout] Basket item ${index + 1}: ${item.productName}, price: ${unitPrice}, category1: ${category1}, category2: ${category2 || 'N/A'}`);
+                this.logger.debug(`[createCheckout] Basket item ${index + 1}: ${item.productName}, quantity: ${item.quantity}, totalPrice: ${itemTotalPrice}, category1: ${category1}, category2: ${category2 || 'N/A'}`);
 
                 return {
                     id: basketItemId,
@@ -253,9 +254,25 @@ export class PaymentService {
                     category1: category1,
                     ...(category2 && { category2: category2 }),
                     itemType: 'PHYSICAL' as const,
-                    price: unitPrice, // Provider interface expects number, will be converted to string in provider
+                    price: itemTotalPrice, // Total price for this item (already includes quantity)
                 };
             });
+
+            // Validate that basketItems total equals order total
+            // Iyzico requires: sum(basketItems[].price) == price == paidPrice
+            const basketItemsTotal = basketItems.reduce((sum, item) => sum + item.price, 0);
+            this.logger.debug(`[createCheckout] Basket items total: ${basketItemsTotal}, Order total: ${totalAmount}`);
+            
+            // Allow small rounding differences (0.01 tolerance) due to floating point precision
+            const difference = Math.abs(basketItemsTotal - totalAmount);
+            if (difference > 0.01) {
+                this.logger.error(`[createCheckout] Basket items total (${basketItemsTotal}) does not match order total (${totalAmount}), difference: ${difference}`);
+                throw new BadRequestException(`Basket items total (${basketItemsTotal.toFixed(2)}) does not match order total (${totalAmount.toFixed(2)}). Difference: ${difference.toFixed(2)}`);
+            } else if (difference > 0) {
+                this.logger.warn(`[createCheckout] Small rounding difference detected: ${difference.toFixed(4)}. Adjusting order total to match basket items total.`);
+                // Adjust totalAmount to match basketItemsTotal to avoid Iyzico error
+                totalAmount = basketItemsTotal;
+            }
 
             this.logger.log(`[createCheckout] Calling provider.initializeCheckout for order ${checkoutDto.orderId}...`);
             const result = await providerInstance.initializeCheckout({

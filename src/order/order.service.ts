@@ -153,9 +153,9 @@ export class OrderService {
 
       await queryRunner.manager.save(OrderItem, orderItems);
 
-      // Update cart status to ORDERED
-      cart.status = CartStatus.ORDERED;
-      await queryRunner.manager.save(Cart, cart);
+      // Don't update cart status to ORDERED here - wait for payment success
+      // Cart will be marked as ORDERED only after successful payment
+      // This allows the cart to be reused if payment fails
 
       await queryRunner.commitTransaction();
 

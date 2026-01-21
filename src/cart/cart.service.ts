@@ -393,7 +393,7 @@ export class CartService {
     }
 
     /**
-     * Clear cart items (used after successful payment)
+     * Clear cart items and mark as ORDERED (used after successful payment)
      */
     async clearCart(cartId: string): Promise<void> {
         const cart = await this.cartRepository.findOne({
@@ -405,13 +405,16 @@ export class CartService {
             return; // Cart not found, nothing to clear
         }
 
+        // Mark cart as ORDERED first (payment was successful)
+        cart.status = CartStatus.ORDERED;
+        await this.cartRepository.save(cart);
+
         // Delete all cart items
         if (cart.items && cart.items.length > 0) {
             await this.cartItemRepository.remove(cart.items);
         }
 
-        // Optionally, you can also delete the cart or keep it empty
-        // For now, we'll keep the cart but it will be empty
+        // Cart is now ORDERED and empty
     }
 
     /**
