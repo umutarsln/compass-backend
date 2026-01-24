@@ -1,5 +1,5 @@
-import { IsNotEmpty, IsString, IsUUID, IsInt, Min, IsOptional } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, IsUUID, IsInt, Min, IsOptional, IsObject } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AddItemDto {
   @ApiProperty({
@@ -28,4 +28,15 @@ export class AddItemDto {
   @IsInt()
   @Min(1)
   quantity: number;
+
+  @ApiPropertyOptional({
+    description: 'Personalization data (form values + fileIds)',
+    example: { formValues: { customer_name: 'John' }, fileIds: ['uuid1'] },
+  })
+  @IsOptional()
+  @IsObject()
+  personalization?: {
+    formValues: Record<string, any>;
+    fileIds?: string[];
+  };
 }

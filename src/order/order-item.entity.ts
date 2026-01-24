@@ -53,16 +53,19 @@ export class OrderItem {
     @Column('decimal', { precision: 10, scale: 2 })
     totalPrice: number; // Toplam fiyat (unitPrice * quantity veya discountedPrice * quantity)
 
-    @Column({
-        type: 'enum',
-        enum: Currency,
-        default: Currency.TRY,
-    })
-    currency: Currency;
+  @Column({
+    type: 'enum',
+    enum: Currency,
+    default: Currency.TRY,
+  })
+  currency: Currency;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @Column({ type: 'jsonb', nullable: true })
+  personalization: any | null; // Snapshot storage for personalization data
 
-    @UpdateDateColumn()
-    updatedAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

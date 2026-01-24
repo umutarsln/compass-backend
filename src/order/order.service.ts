@@ -148,6 +148,7 @@ export class OrderService {
           discountedPrice: cartItem.discountedPrice ? Number(cartItem.discountedPrice) : null,
           totalPrice,
           currency: cartItem.currency,
+          personalization: cartItem.personalization || null, // Copy snapshot from cart
         });
       });
 
@@ -415,6 +416,7 @@ export class OrderService {
           discountedPrice: item.discountedPrice ? Number(item.discountedPrice) : null,
           totalPrice: Number(item.totalPrice),
           currency: item.currency,
+          personalization: item.personalization || null, // Include personalization snapshot
           createdAt: item.createdAt,
         };
 

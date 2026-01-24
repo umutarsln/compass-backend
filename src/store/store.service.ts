@@ -13,6 +13,7 @@ import { StoreProductDto, StoreProductListResponseDto, StoreProductGalleryDto } 
 import { StoreProductDetailResponseDto, StoreVariantOptionDto, StoreVariantCombinationDto } from './dto/store-product-detail-response.dto';
 import { ProductType } from '../common/enums/product-type.enum';
 import { generateSlug } from '../common/utils/slug.util';
+import { PersonalizationService } from '../personalization/personalization.service';
 
 @Injectable()
 export class StoreService {
@@ -27,6 +28,7 @@ export class StoreService {
         private categoryRepository: Repository<Category>,
         @InjectRepository(Tag)
         private tagRepository: Repository<Tag>,
+        private personalizationService: PersonalizationService,
     ) { }
 
     /**
@@ -129,8 +131,6 @@ export class StoreService {
     async getProductDetail(productId: string): Promise<StoreProductDetailResponseDto> {
         // UUID formatını kontrol et (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
-        console.log("productId: ", productId);
-        console.log("isUUID: ", isUUID);
         let product: Product | null = null;
         let selectedCombinationId: string | null = null; // Slug'dan bulunan kombinasyon ID'si
 
@@ -149,7 +149,6 @@ export class StoreService {
                 ],
             });
 
-            console.log("basic product: ", product);
 
             // Eğer bulunamadıysa, variant_combinations tablosundan dene (combination ID olarak)
             if (!product) {
@@ -190,7 +189,6 @@ export class StoreService {
                 ],
             });
 
-            console.log("basic product: ", product);
 
             // Eğer bulunamadıysa, variant_combinations tablosundan dene (combination slug'ı olarak)
             if (!product) {
@@ -219,6 +217,25 @@ export class StoreService {
 
         if (!product) {
             throw new NotFoundException('Ürün bulunamadı');
+        }
+
+        // Get personalization form if exists
+        let personalizationForm: {
+            formId: string;
+            versionId: string;
+            version: number;
+            schemaSnapshot: any;
+        } | null = null;
+        if (product.personalizationFormId) {
+            const version = await this.personalizationService.getPublishedVersionForProduct(product.id);
+            if (version) {
+                personalizationForm = {
+                    formId: version.formId,
+                    versionId: version.id,
+                    version: version.version,
+                    schemaSnapshot: version.schemaSnapshot,
+                };
+            }
         }
 
         // Basit ürün için
@@ -260,6 +277,7 @@ export class StoreService {
                 variantOptions: null,
                 variantCombinations: null,
                 selectedCombination: null,
+                personalizationForm,
                 createdAt: product.createdAt,
                 updatedAt: product.updatedAt,
             };
@@ -424,6 +442,7 @@ export class StoreService {
             variantOptions: mappedVariantOptions,
             variantCombinations: mappedCombinations,
             selectedCombination,
+            personalizationForm,
             createdAt: product.createdAt,
             updatedAt: product.updatedAt,
         };

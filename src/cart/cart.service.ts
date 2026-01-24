@@ -13,6 +13,9 @@ import { VariantCombination } from '../product/variant-combination.entity';
 import { CartStatus } from '../common/enums/cart-status.enum';
 import { Currency } from '../common/enums/currency.enum';
 import { ProductType } from '../common/enums/product-type.enum';
+import { CartPersonalizationValidatorService } from '../personalization/cart-personalization-validator.service';
+import { CartPersonalizationPricingService } from '../personalization/cart-personalization-pricing.service';
+import { PersonalizationSnapshotService } from '../personalization/personalization-snapshot.service';
 
 @Injectable()
 export class CartService {
@@ -26,6 +29,9 @@ export class CartService {
         @InjectRepository(VariantCombination)
         private variantCombinationRepository: Repository<VariantCombination>,
         private dataSource: DataSource,
+        private personalizationValidator: CartPersonalizationValidatorService,
+        private personalizationPricing: CartPersonalizationPricingService,
+        private personalizationSnapshot: PersonalizationSnapshotService,
     ) { }
 
     /**
@@ -163,6 +169,8 @@ export class CartService {
         quantity: number,
         variantId?: string | null,
         userId?: string | null,
+        personalization?: { formValues: Record<string, any>; fileIds?: string[] } | null,
+        guestId?: string | null,
     ): Promise<CartItem> {
         // Validate cart ownership
         const cart = await this.getCart(cartId, userId);
@@ -191,27 +199,99 @@ export class CartService {
             }
         }
 
+        // Validate and process personalization if provided
+        let personalizationSnapshot: any = null;
+        let personalizationAmount = 0;
+
+        if (personalization) {
+            // Validate personalization data
+            await this.personalizationValidator.validate(
+                productId,
+                variantId,
+                personalization.formValues,
+                personalization.fileIds,
+                userId || null,
+                guestId || null,
+            );
+
+            // Calculate personalization pricing
+            const pricingResult = await this.personalizationPricing.calculate(
+                productId,
+                personalization.formValues,
+            );
+            personalizationAmount = pricingResult.totalPersonalizationAmount;
+
+            // Generate snapshot
+            personalizationSnapshot = await this.personalizationSnapshot.generate(
+                productId,
+                personalization.formValues,
+            );
+        }
+
         // Calculate price snapshot
         const { basePrice, discountedPrice } = await this.calculatePriceSnapshot(
             product,
             variantId,
         );
 
+        // Add personalization amount to base price
+        const finalBasePrice = basePrice + personalizationAmount;
+        const finalDiscountedPrice = discountedPrice
+            ? discountedPrice + personalizationAmount
+            : null;
+
         // Check if item already exists
-        const existingItem = await this.cartItemRepository.findOne({
-            where: {
-                cartId,
-                productId,
-                variantId: variantId ? variantId : IsNull(),
-            },
-        });
+        // For personalized items, we need to check both productId/variantId AND personalization
+        // If personalization exists, treat as separate item even if productId/variantId match
+        const hasPersonalization = personalizationSnapshot !== null && personalizationSnapshot !== undefined;
+        
+        let existingItem: CartItem | null = null;
+        
+        if (hasPersonalization) {
+            // For personalized items, find item with same productId, variantId AND personalization
+            // We need to check all items and compare personalization JSON
+            const allItems = await this.cartItemRepository.find({
+                where: {
+                    cartId,
+                    productId,
+                    variantId: variantId ? variantId : IsNull(),
+                },
+            });
+            
+            // Find item with matching personalization (deep comparison)
+            existingItem = allItems.find((item) => {
+                if (!item.personalization) return false;
+                // Compare personalization snapshots by JSON stringify
+                // This compares the entire snapshot structure
+                return JSON.stringify(item.personalization) === JSON.stringify(personalizationSnapshot);
+            }) || null;
+        } else {
+            // For non-personalized items, match by productId and variantId only
+            // Also ensure existing item has no personalization
+            const allItems = await this.cartItemRepository.find({
+                where: {
+                    cartId,
+                    productId,
+                    variantId: variantId ? variantId : IsNull(),
+                },
+            });
+            
+            // Find item without personalization
+            existingItem = allItems.find((item) => 
+                !item.personalization || item.personalization === null
+            ) || null;
+        }
 
         if (existingItem) {
-            // Update quantity (idempotent)
+            // Update quantity (idempotent) - same product + variant + personalization
             existingItem.quantity = existingItem.quantity + quantity;
             // Update prices to latest snapshot
-            existingItem.basePrice = basePrice;
-            existingItem.discountedPrice = discountedPrice;
+            existingItem.basePrice = finalBasePrice;
+            existingItem.discountedPrice = finalDiscountedPrice;
+            // Preserve personalization if it exists
+            if (hasPersonalization) {
+                existingItem.personalization = personalizationSnapshot;
+            }
             return await this.cartItemRepository.save(existingItem);
         }
 
@@ -221,22 +301,25 @@ export class CartService {
             productId,
             variantId: variantId || null,
             quantity,
-            basePrice,
-            discountedPrice,
+            basePrice: finalBasePrice,
+            discountedPrice: finalDiscountedPrice,
             currency: Currency.TRY,
+            personalization: personalizationSnapshot,
         });
 
         return await this.cartItemRepository.save(cartItem);
     }
 
     /**
-     * Update item quantity
+     * Update item quantity and/or personalization
      */
     async updateItem(
         cartId: string,
         itemId: string,
         quantity: number,
         userId?: string | null,
+        personalization?: { formValues: Record<string, any>; fileIds?: string[] } | null,
+        guestId?: string | null,
     ): Promise<CartItem> {
         // Validate cart ownership
         await this.getCart(cartId, userId);
@@ -247,6 +330,7 @@ export class CartService {
 
         const item = await this.cartItemRepository.findOne({
             where: { id: itemId, cartId },
+            relations: ['product'],
         });
 
         if (!item) {
@@ -254,6 +338,48 @@ export class CartService {
         }
 
         item.quantity = quantity;
+
+        // Update personalization if provided
+        if (personalization) {
+            // Validate personalization data
+            await this.personalizationValidator.validate(
+                item.productId,
+                item.variantId,
+                personalization.formValues,
+                personalization.fileIds,
+                userId || null,
+                guestId || null,
+            );
+
+            // Calculate new personalization pricing
+            const pricingResult = await this.personalizationPricing.calculate(
+                item.productId,
+                personalization.formValues,
+            );
+            const personalizationAmount = pricingResult.totalPersonalizationAmount;
+
+            // Generate new snapshot
+            const personalizationSnapshot = await this.personalizationSnapshot.generate(
+                item.productId,
+                personalization.formValues,
+            );
+
+            // Update personalization snapshot
+            item.personalization = personalizationSnapshot;
+
+            // Recalculate prices (base price from product + new personalization amount)
+            const { basePrice, discountedPrice } = await this.calculatePriceSnapshot(
+                item.product,
+                item.variantId,
+            );
+
+            // Update prices with new personalization amount
+            item.basePrice = basePrice + personalizationAmount;
+            item.discountedPrice = discountedPrice
+                ? discountedPrice + personalizationAmount
+                : null;
+        }
+
         return await this.cartItemRepository.save(item);
     }
 
@@ -334,21 +460,43 @@ export class CartService {
 
             // Merge items
             for (const guestItem of guestCart.items) {
-                const existingItem = userCart.items.find(
-                    (item) =>
-                        item.productId === guestItem.productId &&
-                        item.variantId === guestItem.variantId,
-                );
+                // For personalized items, we need to check both productId/variantId AND personalization
+                // If personalization exists, treat as separate item even if productId/variantId match
+                const hasPersonalization = guestItem.personalization !== null && guestItem.personalization !== undefined;
+                
+                let existingItem: CartItem | undefined;
+                
+                if (hasPersonalization) {
+                    // For personalized items, check if exact same personalization exists
+                    existingItem = userCart.items.find(
+                        (item) =>
+                            item.productId === guestItem.productId &&
+                            item.variantId === guestItem.variantId &&
+                            JSON.stringify(item.personalization) === JSON.stringify(guestItem.personalization),
+                    );
+                } else {
+                    // For non-personalized items, match by productId and variantId only
+                    existingItem = userCart.items.find(
+                        (item) =>
+                            item.productId === guestItem.productId &&
+                            item.variantId === guestItem.variantId &&
+                            (item.personalization === null || item.personalization === undefined),
+                    );
+                }
 
                 if (existingItem) {
-                    // Sum quantities
+                    // Sum quantities for matching items
                     existingItem.quantity = existingItem.quantity + guestItem.quantity;
                     // Use latest price snapshot
                     existingItem.basePrice = guestItem.basePrice;
                     existingItem.discountedPrice = guestItem.discountedPrice;
+                    // Preserve personalization if it exists
+                    if (hasPersonalization) {
+                        existingItem.personalization = guestItem.personalization;
+                    }
                     await manager.save(CartItem, existingItem);
                 } else {
-                    // Create new item in user cart
+                    // Create new item in user cart (including personalization)
                     const newItem = manager.create(CartItem, {
                         cartId: userCart.id,
                         productId: guestItem.productId,
@@ -357,6 +505,7 @@ export class CartService {
                         basePrice: guestItem.basePrice,
                         discountedPrice: guestItem.discountedPrice,
                         currency: guestItem.currency,
+                        personalization: guestItem.personalization, // Copy personalization data
                     });
                     await manager.save(CartItem, newItem);
                 }

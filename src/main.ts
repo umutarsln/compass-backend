@@ -12,7 +12,7 @@ async function bootstrap() {
   app.enableCors({
     origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:7600', 'http://localhost:7601', 'https://shawk.com.tr', 'http://shawk.com.tr', 'https://admin.shawk.com.tr', 'http://admin.shawk.com.tr'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-guest-id'],
     credentials: true,
   });
 

@@ -154,6 +154,14 @@ export class StoreProductDetailResponseDto {
   @ApiProperty({ nullable: true })
   selectedCombination: StoreVariantCombinationDto | null; // Seçili kombinasyon (variantCombinationId query param ile)
 
+  @ApiProperty({ nullable: true, description: 'Personalization form data' })
+  personalizationForm: {
+    formId: string;
+    versionId: string;
+    version: number;
+    schemaSnapshot: any;
+  } | null;
+
   @ApiProperty()
   createdAt: Date;
 

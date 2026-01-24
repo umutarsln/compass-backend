@@ -70,15 +70,21 @@ export class CartController {
   async addItem(
     @Param('id') cartId: string,
     @Body() addItemDto: AddItemDto,
+    @Request() req: any,
   ): Promise<CartResponseDto> {
+    const userId = req.user?.id || null;
+    const guestId = req.headers['x-guest-id'] || null;
+    
     await this.cartService.addItem(
       cartId,
       addItemDto.productId,
       addItemDto.quantity,
       addItemDto.variantId,
-      null,
+      userId,
+      addItemDto.personalization || null,
+      guestId,
     );
-    const cart = await this.cartService.getCart(cartId, null);
+    const cart = await this.cartService.getCart(cartId, userId);
     return this.mapToResponseDto(cart);
   }
 
@@ -96,9 +102,20 @@ export class CartController {
     @Param('id') cartId: string,
     @Param('itemId') itemId: string,
     @Body() updateItemDto: UpdateItemDto,
+    @Request() req: any,
   ): Promise<CartResponseDto> {
-    await this.cartService.updateItem(cartId, itemId, updateItemDto.quantity, null);
-    const cart = await this.cartService.getCart(cartId, null);
+    const userId = req.user?.id || null;
+    const guestId = req.headers['x-guest-id'] || null;
+    
+    await this.cartService.updateItem(
+      cartId,
+      itemId,
+      updateItemDto.quantity,
+      userId,
+      updateItemDto.personalization || null,
+      guestId,
+    );
+    const cart = await this.cartService.getCart(cartId, userId);
     return this.mapToResponseDto(cart);
   }
 
@@ -231,6 +248,7 @@ export class CartController {
             } : null,
             variantValues: variantValues,
           } : null,
+          personalization: item.personalization || null,
           createdAt: item.createdAt,
           updatedAt: item.updatedAt,
         };

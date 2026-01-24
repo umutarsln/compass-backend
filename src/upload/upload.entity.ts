@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { User } from '../user/user.entity';
 import { Folder } from '../folder/folder.entity';
+import { UploadOwnerType } from '../common/enums/upload-owner-type.enum';
 
 @Entity('uploads')
 export class Upload {
@@ -58,12 +59,22 @@ export class Upload {
   @Column({ type: 'simple-array', nullable: true })
   seoKeywords: string[] | null; // SEO anahtar kelimeler
 
-  @Column()
-  createdById: string; // Yükleyen kullanıcı
+  @Column({ type: 'uuid', nullable: true })
+  createdById: string | null; // Yükleyen kullanıcı (null for guest uploads)
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'createdById' })
-  createdBy: User;
+  createdBy: User | null;
+
+  @Column({
+    type: 'enum',
+    enum: UploadOwnerType,
+    nullable: true,
+  })
+  ownerType: UploadOwnerType | null; // USER | GUEST
+
+  @Column({ type: 'varchar', nullable: true })
+  ownerId: string | null; // userId (UUID) or guestId (string format: guest_xxx)
 
   @CreateDateColumn()
   createdAt: Date;

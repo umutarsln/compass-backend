@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Request,
+  Headers,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
@@ -24,6 +25,8 @@ import { UploadService } from './upload.service';
 import { CreateUploadDto } from './dto/create-upload.dto';
 import { UpdateUploadDto } from './dto/update-upload.dto';
 import { Upload } from './upload.entity';
+import { Public } from '../common/decorators/public.decorator';
+import { UploadOwnerType } from '../common/enums/upload-owner-type.enum';
 
 @ApiTags('Uploads')
 @Controller('uploads')
@@ -92,7 +95,61 @@ export class UploadController {
     }
 
     const userId = req.user?.userId;
-    return await this.uploadService.create(file, createUploadDto, userId);
+    const ownerType = req.user ? UploadOwnerType.USER : null;
+    const ownerId = userId || null;
+    return await this.uploadService.create(file, createUploadDto, userId, ownerType, ownerId);
+  }
+
+  @Post('guest')
+  @Public()
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Guest dosya yükle (public)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Yüklenecek dosya',
+        },
+        displayName: {
+          type: 'string',
+          description: 'Görünen isim (opsiyonel)',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Dosya başarıyla yüklendi',
+    type: Upload,
+  })
+  async uploadGuest(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() createUploadDto: CreateUploadDto,
+    @Request() req: any,
+    @Headers('x-guest-id') guestIdHeader?: string | string[],
+  ): Promise<Upload> {
+    if (!file) {
+      throw new BadRequestException('Dosya yüklenmedi');
+    }
+
+    // guestId sadece header'dan alınır, body'den değil
+    const guestId = Array.isArray(guestIdHeader) ? guestIdHeader[0] : guestIdHeader;
+    if (!guestId) {
+      throw new BadRequestException('Guest ID is required in x-guest-id header');
+    }
+
+    // Guest upload'lar için createdById null olur (ownerType ve ownerId ile sahiplik takip edilir)
+    return await this.uploadService.create(
+      file,
+      createUploadDto,
+      null, // Guest upload'lar için createdById null
+      UploadOwnerType.GUEST,
+      guestId,
+    );
   }
 
   @Get()
@@ -118,7 +175,8 @@ export class UploadController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Dosya detayını getir' })
+  @Public()
+  @ApiOperation({ summary: 'Dosya detayını getir (public - kişiselleştirme için)' })
   @ApiResponse({
     status: 200,
     description: 'Dosya detayı başarıyla döndürüldü',

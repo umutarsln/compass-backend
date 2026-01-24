@@ -158,4 +158,13 @@ export class UpdateProductDto extends PartialType(CreateProductDto) {
   @IsArray()
   @IsUUID('4', { each: true })
   tagIds?: string[];
+
+  @ApiProperty({
+    description: 'Kişiselleştirme Form ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID('4')
+  personalizationFormId?: string | null;
 }

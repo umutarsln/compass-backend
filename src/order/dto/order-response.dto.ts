@@ -11,6 +11,7 @@ export class OrderItemResponseDto {
   discountedPrice: number | null;
   totalPrice: number;
   currency: Currency;
+  personalization: any | null; // Personalization snapshot data
   createdAt: Date;
   product?: {
     id: string;

@@ -14,7 +14,8 @@ import { Product } from '../product/product.entity';
 import { VariantCombination } from '../product/variant-combination.entity';
 
 @Entity('cart_items')
-@Unique('unique_cart_product_variant', ['cartId', 'productId', 'variantId'])
+// Unique constraint removed: Same product with different personalizations should be separate items
+// The uniqueness is now handled in application logic (cart.service.ts)
 export class CartItem {
     @PrimaryGeneratedColumn('uuid')
     id: string;
@@ -49,16 +50,19 @@ export class CartItem {
     @Column('decimal', { precision: 10, scale: 2, nullable: true })
     discountedPrice: number | null; // Discounted price snapshot at add time
 
-    @Column({
-        type: 'enum',
-        enum: Currency,
-        default: Currency.TRY,
-    })
-    currency: Currency;
+  @Column({
+    type: 'enum',
+    enum: Currency,
+    default: Currency.TRY,
+  })
+  currency: Currency;
 
-    @CreateDateColumn()
-    createdAt: Date;
+  @Column({ type: 'jsonb', nullable: true })
+  personalization: any | null; // Snapshot storage for personalization data
 
-    @UpdateDateColumn()
-    updatedAt: Date;
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

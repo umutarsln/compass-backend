@@ -78,6 +78,9 @@ export class CartItemResponseDto {
         }>;
     } | null;
 
+    @ApiProperty({ nullable: true, description: 'Personalization snapshot data' })
+    personalization: any | null;
+
     @ApiProperty()
     createdAt: Date;
 

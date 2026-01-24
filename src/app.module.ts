@@ -18,6 +18,7 @@ import { OrderModule } from './order/order.module';
 import { PaymentModule } from './payment/payment.module';
 import { MailModule } from './mail/mail.module';
 import { DocsModule } from './docs/docs.module';
+import { PersonalizationModule } from './personalization/personalization.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { DocsModule } from './docs/docs.module';
     PaymentModule,
     MailModule,
     DocsModule,
+    PersonalizationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

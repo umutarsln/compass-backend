@@ -13,6 +13,7 @@ import { CreateUploadDto } from './dto/create-upload.dto';
 import { UpdateUploadDto } from './dto/update-upload.dto';
 import { S3Service } from './s3/s3.service';
 import { Folder } from '../folder/folder.entity';
+import { UploadOwnerType } from '../common/enums/upload-owner-type.enum';
 
 @Injectable()
 export class UploadService {
@@ -97,7 +98,9 @@ export class UploadService {
   async create(
     file: Express.Multer.File,
     createUploadDto: CreateUploadDto,
-    createdById: string,
+    createdById: string | null,
+    ownerType?: UploadOwnerType | null,
+    ownerId?: string | null,
   ): Promise<Upload> {
     // Dosya validasyonu
     this.validateFile(file);
@@ -154,6 +157,8 @@ export class UploadService {
       seoDescription: createUploadDto.seoDescription,
       seoKeywords: createUploadDto.seoKeywords,
       createdById,
+      ownerType: ownerType || null,
+      ownerId: ownerId || null,
     });
 
     return await this.uploadRepository.save(upload);

@@ -9,6 +9,7 @@ import { Tag } from '../tag/tag.entity';
 import { Stock } from '../stock/stock.entity';
 import { StoreService } from './store.service';
 import { StoreController } from './store.controller';
+import { PersonalizationModule } from '../personalization/personalization.module';
 
 @Module({
     imports: [
@@ -21,6 +22,7 @@ import { StoreController } from './store.controller';
             Tag,
             Stock,
         ]),
+        PersonalizationModule,
     ],
     controllers: [StoreController],
     providers: [StoreService],

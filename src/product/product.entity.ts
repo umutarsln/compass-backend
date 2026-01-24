@@ -97,6 +97,13 @@ export class Product {
   @OneToOne(() => Stock, (stock) => stock.product)
   stock: Stock | null;
 
+  @Column({ type: 'uuid', nullable: true })
+  personalizationFormId: string | null;
+
+  @ManyToOne('PersonalizationForm', { nullable: true })
+  @JoinColumn({ name: 'personalizationFormId' })
+  personalizationForm: any | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
