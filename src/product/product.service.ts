@@ -28,6 +28,7 @@ import { CreateVariantValueDto } from './dto/create-variant-value.dto';
 import { UpdateVariantValueDto } from './dto/update-variant-value.dto';
 import { CreateVariantCombinationDto } from './dto/create-variant-combination.dto';
 import { UpdateVariantCombinationDto } from './dto/update-variant-combination.dto';
+import { generateSlug } from '../common/utils/slug.util';
 
 @Injectable()
 export class ProductService {
@@ -53,18 +54,6 @@ export class ProductService {
     private stockService: StockService,
     private dataSource: DataSource,
   ) { }
-
-  /**
-   * Slug oluşturur (URL-friendly string)
-   */
-  private generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-  }
 
   /**
    * Benzersiz slug oluşturur
@@ -101,8 +90,8 @@ export class ProductService {
     // Her varyasyon değeri için slug parçası oluştur
     for (const value of sortedValues) {
       if (value.variantOption) {
-        const optionSlug = this.generateSlug(value.variantOption.name);
-        const valueSlug = this.generateSlug(value.value);
+        const optionSlug = generateSlug(value.variantOption.name);
+        const valueSlug = generateSlug(value.value);
         variantParts.push(`${optionSlug}-${valueSlug}`);
       }
     }
@@ -174,7 +163,7 @@ export class ProductService {
     createdById: string,
   ): Promise<Product> {
     // Slug oluştur
-    const baseSlug = this.generateSlug(createProductDto.name);
+    const baseSlug = generateSlug(createProductDto.name);
     const slug = await this.generateUniqueSlug(baseSlug);
 
     // SKU kontrolü
@@ -292,7 +281,7 @@ export class ProductService {
 
     // Name değiştiyse slug'ı güncelle
     if (updateProductDto.name && updateProductDto.name !== product.name) {
-      const baseSlug = this.generateSlug(updateProductDto.name);
+      const baseSlug = generateSlug(updateProductDto.name);
       product.slug = await this.generateUniqueSlug(baseSlug);
       product.name = updateProductDto.name;
     }
@@ -359,7 +348,132 @@ export class ProductService {
 
   async remove(id: string): Promise<void> {
     const product = await this.findOne(id);
-    await this.productRepository.remove(product);
+    
+    // Varyantlı ürünler için ilişkili verileri manuel olarak silmemiz gerekiyor
+    // çünkü ManyToMany join table'ları cascade delete ile otomatik silinmiyor
+    if (product.type === ProductType.VARIANT) {
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+
+      try {
+        // 1. BundleItems sil (eğer bu ürün bir bundle'ın parçasıysa)
+        await queryRunner.manager
+          .createQueryBuilder()
+          .delete()
+          .from('bundle_items')
+          .where('productId = :productId OR bundleProductId = :productId', { productId: id })
+          .execute();
+
+        // 2. ProductGalleries sil
+        await queryRunner.manager
+          .createQueryBuilder()
+          .delete()
+          .from('product_galleries')
+          .where('productId = :productId', { productId: id })
+          .execute();
+
+        // 3. Variant Combination Galleries sil
+        const variantCombinations = await queryRunner.manager
+          .find(VariantCombination, {
+            where: { productId: id },
+            select: ['id'],
+          });
+
+        const combinationIds = variantCombinations.map(vc => vc.id);
+        if (combinationIds.length > 0) {
+          await queryRunner.manager
+            .createQueryBuilder()
+            .delete()
+            .from('product_galleries')
+            .where('variantCombinationId IN (:...ids)', { ids: combinationIds })
+            .execute();
+        }
+
+        // 4. Stocks sil (variant combination stock'ları dahil)
+        if (combinationIds.length > 0) {
+          await queryRunner.manager
+            .createQueryBuilder()
+            .delete()
+            .from('stocks')
+            .where('variantCombinationId IN (:...ids)', { ids: combinationIds })
+            .execute();
+        }
+        
+        // Product stock'u sil
+        await queryRunner.manager
+          .createQueryBuilder()
+          .delete()
+          .from('stocks')
+          .where('productId = :productId', { productId: id })
+          .execute();
+
+        // 5. variant_combination_values join table'ını sil (ManyToMany ilişki tablosu)
+        if (combinationIds.length > 0) {
+          await queryRunner.manager
+            .createQueryBuilder()
+            .delete()
+            .from('variant_combination_values')
+            .where('variantCombinationId IN (:...ids)', { ids: combinationIds })
+            .execute();
+        }
+
+        // 6. VariantCombinations sil (join table silindikten sonra)
+        if (combinationIds.length > 0) {
+          await queryRunner.manager
+            .createQueryBuilder()
+            .delete()
+            .from('variant_combinations')
+            .where('productId = :productId', { productId: id })
+            .execute();
+        }
+
+        // 7. VariantValues sil (product'a bağlı option'lara ait values'lar)
+        const variantOptions = await queryRunner.manager
+          .find(VariantOption, {
+            where: { productId: id },
+            select: ['id'],
+          });
+
+        const optionIds = variantOptions.map(vo => vo.id);
+        if (optionIds.length > 0) {
+          await queryRunner.manager
+            .createQueryBuilder()
+            .delete()
+            .from('variant_values')
+            .where('variantOptionId IN (:...ids)', { ids: optionIds })
+            .execute();
+        }
+
+        // 8. VariantOptions sil
+        if (optionIds.length > 0) {
+          await queryRunner.manager
+            .createQueryBuilder()
+            .delete()
+            .from('variant_options')
+            .where('productId = :productId', { productId: id })
+            .execute();
+        }
+
+        // 9. Product sil (en son)
+        await queryRunner.manager
+          .createQueryBuilder()
+          .delete()
+          .from('products')
+          .where('id = :id', { id })
+          .execute();
+
+        await queryRunner.commitTransaction();
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        throw error;
+      } finally {
+        await queryRunner.release();
+      }
+    } else {
+      // Basit ürünler için normal silme işlemi (CASCADE çalışır)
+      await this.productRepository.remove(product);
+    }
   }
 
   // ==================== ProductGallery Methods ====================

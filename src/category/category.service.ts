@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { Category } from './category.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { generateSlug } from '../common/utils/slug.util';
 
 @Injectable()
 export class CategoryService {
@@ -16,18 +17,6 @@ export class CategoryService {
     @InjectRepository(Category)
     private categoryRepository: Repository<Category>,
   ) {}
-
-  /**
-   * Slug oluşturur (URL-friendly string)
-   */
-  private generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-  }
 
   /**
    * Benzersiz slug oluşturur
@@ -46,7 +35,7 @@ export class CategoryService {
 
   async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
     // Slug oluştur
-    const baseSlug = this.generateSlug(createCategoryDto.name);
+    const baseSlug = generateSlug(createCategoryDto.name);
     const slug = await this.generateUniqueSlug(baseSlug);
 
     // Parent kontrolü
@@ -123,7 +112,7 @@ export class CategoryService {
 
     // Name değiştiyse slug'ı güncelle
     if (updateCategoryDto.name && updateCategoryDto.name !== category.name) {
-      const baseSlug = this.generateSlug(updateCategoryDto.name);
+      const baseSlug = generateSlug(updateCategoryDto.name);
       category.slug = await this.generateUniqueSlug(baseSlug);
       category.name = updateCategoryDto.name;
     }

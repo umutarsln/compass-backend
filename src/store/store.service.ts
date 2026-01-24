@@ -12,6 +12,7 @@ import { StoreProductQueryDto, StoreProductOrderBy } from './dto/store-product-q
 import { StoreProductDto, StoreProductListResponseDto, StoreProductGalleryDto } from './dto/store-product-response.dto';
 import { StoreProductDetailResponseDto, StoreVariantOptionDto, StoreVariantCombinationDto } from './dto/store-product-detail-response.dto';
 import { ProductType } from '../common/enums/product-type.enum';
+import { generateSlug } from '../common/utils/slug.util';
 
 @Injectable()
 export class StoreService {
@@ -691,17 +692,6 @@ export class StoreService {
 
 
 
-    /**
-     * Slug oluşturur (URL-friendly string)
-     */
-    private generateSlug(text: string): string {
-        return text
-            .toLowerCase()
-            .trim()
-            .replace(/[^\w\s-]/g, '')
-            .replace(/[\s_-]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-    }
 
     /**
      * Varyasyon kombinasyonunu StoreProductDto'ya map et

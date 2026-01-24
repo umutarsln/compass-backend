@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Tag } from './tag.entity';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
+import { generateSlug } from '../common/utils/slug.util';
 
 @Injectable()
 export class TagService {
@@ -15,18 +16,6 @@ export class TagService {
     @InjectRepository(Tag)
     private tagRepository: Repository<Tag>,
   ) {}
-
-  /**
-   * Slug oluşturur (URL-friendly string)
-   */
-  private generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-  }
 
   /**
    * Benzersiz slug oluşturur
@@ -45,7 +34,7 @@ export class TagService {
 
   async create(createTagDto: CreateTagDto): Promise<Tag> {
     // Slug oluştur
-    const baseSlug = this.generateSlug(createTagDto.name);
+    const baseSlug = generateSlug(createTagDto.name);
     const slug = await this.generateUniqueSlug(baseSlug);
 
     const tag = this.tagRepository.create({
@@ -79,7 +68,7 @@ export class TagService {
 
     // Name değiştiyse slug'ı güncelle
     if (updateTagDto.name && updateTagDto.name !== tag.name) {
-      const baseSlug = this.generateSlug(updateTagDto.name);
+      const baseSlug = generateSlug(updateTagDto.name);
       tag.slug = await this.generateUniqueSlug(baseSlug);
       tag.name = updateTagDto.name;
     }

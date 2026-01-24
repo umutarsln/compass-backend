@@ -12,6 +12,7 @@ import { CreateFolderDto } from './dto/create-folder.dto';
 import { UpdateFolderDto } from './dto/update-folder.dto';
 import { Upload } from '../upload/upload.entity';
 import { S3Service } from '../upload/s3/s3.service';
+import { generateSlug } from '../common/utils/slug.util';
 
 @Injectable()
 export class FolderService {
@@ -24,18 +25,6 @@ export class FolderService {
     private uploadRepository: Repository<Upload>,
     private s3Service: S3Service,
   ) { }
-
-  /**
-   * Slug oluşturur (URL-friendly string)
-   */
-  private generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '') // Özel karakterleri kaldır
-      .replace(/[\s_-]+/g, '-') // Boşlukları tire ile değiştir
-      .replace(/^-+|-+$/g, ''); // Başta ve sonda tire varsa kaldır
-  }
 
   /**
    * Klasör path'ini hesaplar
@@ -86,7 +75,7 @@ export class FolderService {
     createdById: string,
   ): Promise<Folder> {
     // Slug oluştur
-    const baseSlug = this.generateSlug(createFolderDto.name);
+    const baseSlug = generateSlug(createFolderDto.name);
     const slug = await this.generateUniqueSlug(baseSlug);
 
     // Parent kontrolü
@@ -220,7 +209,7 @@ export class FolderService {
     // Name değiştiyse slug'ı güncelle
     if (updateFolderDto.name && updateFolderDto.name !== folder.name) {
       this.logger.log(`[UPDATE] İsim değişiyor: "${folder.name}" -> "${updateFolderDto.name}"`);
-      const baseSlug = this.generateSlug(updateFolderDto.name);
+      const baseSlug = generateSlug(updateFolderDto.name);
       folder.slug = await this.generateUniqueSlug(baseSlug);
       folder.name = updateFolderDto.name;
       this.logger.debug(`[UPDATE] Yeni slug: ${folder.slug}`);
