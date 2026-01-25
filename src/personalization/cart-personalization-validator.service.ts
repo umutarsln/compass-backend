@@ -343,8 +343,11 @@ export class CartPersonalizationValidatorService {
 
         // Validate file type if specified in field config
         if (field.config?.allowedMimeTypes) {
-          const allowedTypes = field.config.allowedMimeTypes;
-          if (!allowedTypes.includes(upload.mimeType)) {
+          const allowedTypes = Array.isArray(field.config.allowedMimeTypes)
+            ? field.config.allowedMimeTypes
+            : [];
+          
+          if (allowedTypes.length > 0 && !allowedTypes.includes(upload.mimeType)) {
             throw new BadRequestException(
               `File ${fileId} has invalid type. Allowed: ${allowedTypes.join(', ')}`,
             );

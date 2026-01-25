@@ -90,16 +90,7 @@ export class UpdateProductDto extends PartialType(CreateProductDto) {
   isFeatured?: boolean;
 
   @ApiProperty({
-    description: 'İndirimde mi?',
-    example: true,
-    required: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  isOnSale?: boolean;
-
-  @ApiProperty({
-    description: 'İndirimli fiyat (isOnSale true ise bu fiyat kullanılır)',
+    description: 'İndirimli fiyat (varsa bu fiyat kullanılır)',
     example: 84.99,
     required: false,
   })

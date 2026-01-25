@@ -135,9 +135,9 @@ export class StoreService {
         let selectedCombinationId: string | null = null; // Slug'dan bulunan kombinasyon ID'si
 
         if (isUUID) {
-            // UUID ise önce product tablosundan dene
+            // UUID ise önce product tablosundan dene (SIMPLE ve VARIANT için)
             product = await this.productRepository.findOne({
-                where: { id: productId, type: ProductType.SIMPLE, isActive: true },
+                where: { id: productId, isActive: true },
                 relations: [
                     'categories',
                     'tags',
@@ -249,7 +249,6 @@ export class StoreService {
                 slug: product.slug,
                 description: product.description,
                 basePrice: Number(product.basePrice),
-                isOnSale: product.isOnSale,
                 discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
                 type: 'SIMPLE',
                 gallery: baseGallery,
@@ -418,9 +417,8 @@ export class StoreService {
             subtitle: product.subtitle,
             slug: product.slug,
             description: product.description,
-            basePrice: Number(product.basePrice),
-            isOnSale: product.isOnSale,
-            discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
+                basePrice: Number(product.basePrice),
+                discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
             type: 'VARIANT',
             gallery: displayGallery,
             categories: (product.categories || []).map((cat) => ({
@@ -679,9 +677,8 @@ export class StoreService {
             slug: product.slug,
             description: product.description,
             price,
-            basePrice: Number(product.basePrice),
-            isOnSale: product.isOnSale,
-            discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
+                basePrice: Number(product.basePrice),
+                discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
             sku: product.sku,
             stock: {
                 availableQuantity: product.stock?.availableQuantity || 0,
@@ -748,7 +745,6 @@ export class StoreService {
             description: product.description,
             price,
             basePrice: Math.round(basePriceWithDelta * 100) / 100,
-            isOnSale: product.isOnSale,
             discountedPrice: discountedPriceWithDelta ? Math.round(discountedPriceWithDelta * 100) / 100 : null,
             sku: combination.sku || product.sku,
             stock: {
@@ -793,7 +789,7 @@ export class StoreService {
      */
     private calculatePrice(product: Product): number {
         // Eğer discountedPrice varsa onu kullan
-        if (product.isOnSale && product.discountedPrice != null) {
+        if (product.discountedPrice != null) {
             const discountedPrice = Number(product.discountedPrice);
             if (!isNaN(discountedPrice) && discountedPrice >= 0) {
                 return Math.round(discountedPrice * 100) / 100;
@@ -856,7 +852,7 @@ export class StoreService {
 
         // discountedPrice varsa onu kullan (sadece basePrice yerine), yoksa basePrice kullan
         let baseOrDiscountedPrice = basePriceWithDelta;
-        if (product.isOnSale && product.discountedPrice != null) {
+        if (product.discountedPrice != null) {
             const discountedPrice = Number(product.discountedPrice);
             if (!isNaN(discountedPrice) && discountedPrice >= 0) {
                 // discountedPrice'a da priceDelta'ları ekle

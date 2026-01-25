@@ -139,11 +139,11 @@ export class IyzicoProvider implements PaymentProvider {
                 email: input.buyerInfo.email,
                 // Iyzico requires identityNumber field, send default value if not provided
                 identityNumber: input.buyerInfo.identityNumber || '11111111111',
-                // Iyzico requires registrationAddress, use shippingAddress if available
-                registrationAddress: input.shippingAddress.address || input.buyerInfo.address || '',
-                city: input.shippingAddress.city || input.buyerInfo.city || '',
-                country: this.normalizeCountry(input.shippingAddress.country || input.buyerInfo.country || 'TR'),
-                zipCode: input.shippingAddress.zipCode || input.buyerInfo.zipCode || '',
+                // Iyzico requires registrationAddress, use shippingAddress
+                registrationAddress: input.shippingAddress.address,
+                city: input.shippingAddress.city,
+                country: this.normalizeCountry(input.shippingAddress.country || 'TR'),
+                zipCode: input.shippingAddress.zipCode,
             },
             shippingAddress: {
                 contactName: input.shippingAddress.contactName,

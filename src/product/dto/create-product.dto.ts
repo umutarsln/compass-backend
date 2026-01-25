@@ -87,17 +87,7 @@ export class CreateProductDto {
   isFeatured?: boolean;
 
   @ApiProperty({
-    description: 'İndirimde mi?',
-    example: false,
-    required: false,
-    default: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  isOnSale?: boolean;
-
-  @ApiProperty({
-    description: 'İndirimli fiyat (isOnSale true ise bu fiyat kullanılır)',
+    description: 'İndirimli fiyat (varsa bu fiyat kullanılır)',
     example: 89.99,
     required: false,
   })

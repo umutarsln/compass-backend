@@ -53,9 +53,6 @@ export class Product {
   @Column({ default: false })
   isFeatured: boolean;
 
-  @Column({ default: false })
-  isOnSale: boolean;
-
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   discountedPrice: number | null;
 

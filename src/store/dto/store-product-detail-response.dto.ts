@@ -95,9 +95,6 @@ export class StoreProductDetailResponseDto {
   @ApiProperty()
   basePrice: number;
 
-  @ApiProperty()
-  isOnSale: boolean;
-
   @ApiProperty({ nullable: true })
   discountedPrice: number | null;
 

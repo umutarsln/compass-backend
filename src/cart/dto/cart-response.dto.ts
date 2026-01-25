@@ -31,7 +31,6 @@ export class CartItemResponseDto {
         slug: string;
         basePrice: number;
         discountedPrice: number | null;
-        isOnSale: boolean;
         gallery: {
             mainImage: {
                 id: string;

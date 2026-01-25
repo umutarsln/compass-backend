@@ -213,7 +213,6 @@ export class CartController {
             slug: item.product.slug,
             basePrice: Number(item.product.basePrice),
             discountedPrice: item.product.discountedPrice ? Number(item.product.discountedPrice) : null,
-            isOnSale: item.product.isOnSale,
             gallery: productGallery ? {
               mainImage: productGallery.mainImage ? {
                 id: productGallery.mainImage.id,

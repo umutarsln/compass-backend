@@ -142,7 +142,7 @@ export class ProductService {
     let baseOrDiscountedPrice = Number(product.basePrice);
 
     // Discount uygula - eğer discountedPrice varsa onu kullan (sadece basePrice yerine)
-    if (product.isOnSale && product.discountedPrice != null) {
+    if (product.discountedPrice != null) {
       const discountedPrice = Number(product.discountedPrice);
       if (!isNaN(discountedPrice) && discountedPrice >= 0) {
         baseOrDiscountedPrice = discountedPrice;
