@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets, In } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { ConfigService } from '@nestjs/config';
+import { createClient } from 'redis';
 import { Product } from '../product/product.entity';
 import { VariantCombination } from '../product/variant-combination.entity';
 import { VariantOption } from '../product/variant-option.entity';
@@ -35,6 +37,7 @@ export class StoreService {
         private tagRepository: Repository<Tag>,
         private personalizationService: PersonalizationService,
         @Inject(CACHE_MANAGER) private cacheManager: Cache,
+        private configService: ConfigService,
     ) { }
 
     /**
@@ -55,7 +58,7 @@ export class StoreService {
 
         // Cache key oluştur
         const cacheKey = `${this.CACHE_PREFIX}products:${JSON.stringify(query)}`;
-        
+
         // Cache'den kontrol et
         const cached = await this.cacheManager.get<StoreProductListResponseDto>(cacheKey);
         if (cached) {
@@ -151,7 +154,7 @@ export class StoreService {
     async getProductDetail(productId: string): Promise<StoreProductDetailResponseDto> {
         // Cache key oluştur
         const cacheKey = `${this.CACHE_PREFIX}product:${productId}`;
-        
+
         // Cache'den kontrol et
         const cached = await this.cacheManager.get<StoreProductDetailResponseDto>(cacheKey);
         if (cached) {
@@ -450,8 +453,8 @@ export class StoreService {
             subtitle: product.subtitle,
             slug: product.slug,
             description: product.description,
-                basePrice: Number(product.basePrice),
-                discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
+            basePrice: Number(product.basePrice),
+            discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
             type: 'VARIANT' as const,
             gallery: displayGallery,
             categories: (product.categories || []).map((cat) => ({
@@ -489,7 +492,7 @@ export class StoreService {
      */
     async getCategories(): Promise<Category[]> {
         const cacheKey = `${this.CACHE_PREFIX}categories`;
-        
+
         // Cache'den kontrol et
         const cached = await this.cacheManager.get<Category[]>(cacheKey);
         if (cached) {
@@ -529,7 +532,7 @@ export class StoreService {
      */
     async getTags(): Promise<Tag[]> {
         const cacheKey = `${this.CACHE_PREFIX}tags`;
-        
+
         // Cache'den kontrol et
         const cached = await this.cacheManager.get<Tag[]>(cacheKey);
         if (cached) {
@@ -741,8 +744,8 @@ export class StoreService {
             slug: product.slug,
             description: product.description,
             price,
-                basePrice: Number(product.basePrice),
-                discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
+            basePrice: Number(product.basePrice),
+            discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
             sku: product.sku,
             stock: {
                 availableQuantity: product.stock?.availableQuantity || 0,
@@ -1061,68 +1064,115 @@ export class StoreService {
      * Redis'teki 'store:' prefix'li tüm key'leri siler
      */
     async clearCache(): Promise<void> {
-        try {
-            // cache-manager v5+ için Redis store'a erişim
-            const cacheStore = (this.cacheManager as any).store;
-            
-            if (cacheStore && typeof cacheStore.getClient === 'function') {
-                // Redis client'a eriş
-                const client = cacheStore.getClient();
-                
-                if (client && typeof client.keys === 'function') {
-                    // Redis client'tan tüm 'store:' ile başlayan key'leri bul
-                    const keys = await new Promise<string[]>((resolve, reject) => {
-                        client.keys(`${this.CACHE_PREFIX}*`, (err: Error | null, keys: string[]) => {
-                            if (err) reject(err);
-                            else resolve(keys || []);
-                        });
-                    });
+        const redisHost = this.configService.get<string>('REDIS_HOST');
+        const redisPort = this.configService.get<number>('REDIS_PORT');
+        const redisPassword = this.configService.get<string>('REDIS_PASSWORD');
+        const redisDb = this.configService.get<number>('REDIS_DB');
 
-                    // Bulunan key'leri sil
-                    if (keys.length > 0) {
-                        await Promise.all(keys.map(key => this.cacheManager.del(key)));
-                    }
-                } else if (client && typeof client.scan === 'function') {
-                    // SCAN kullanarak pattern ile key'leri bul (Redis 2.8+)
-                    let cursor = '0';
-                    const keys: string[] = [];
-                    
-                    do {
-                        const result = await new Promise<[string, string[]]>((resolve, reject) => {
-                            client.scan(cursor, 'MATCH', `${this.CACHE_PREFIX}*`, 'COUNT', 100, (err: Error | null, result: [string, string[]]) => {
-                                if (err) reject(err);
-                                else resolve(result);
-                            });
-                        });
-                        
-                        cursor = result[0];
-                        keys.push(...result[1]);
-                    } while (cursor !== '0');
-                    
-                    // Bulunan key'leri sil
-                    if (keys.length > 0) {
-                        await Promise.all(keys.map(key => this.cacheManager.del(key)));
-                    }
-                } else {
-                    // Client'a erişilemiyorsa, bilinen cache key'lerini manuel temizle
-                    await this.cacheManager.del(`${this.CACHE_PREFIX}categories`);
-                    await this.cacheManager.del(`${this.CACHE_PREFIX}tags`);
-                    // Not: Product cache'leri dinamik olduğu için tam temizlik için
-                    // Redis'e direkt erişim gerekir veya tüm cache'i temizlemek gerekir
-                }
+        let redisClient: any = null;
+
+        try {
+            // Direkt Redis client oluştur ve bağlan
+            redisClient = createClient({
+                socket: {
+                    host: redisHost,
+                    port: redisPort,
+                },
+                password: redisPassword || undefined,
+                database: redisDb,
+            });
+
+            // Hata event'lerini dinle
+            redisClient.on('error', (err: Error) => {
+                console.error('[StoreService] Redis client hatası:', err);
+            });
+
+            await redisClient.connect();
+            console.log('[StoreService] Redis client bağlantısı kuruldu, cache temizleme başlıyor...');
+
+            // SCAN kullanarak tüm 'store:' prefix'li key'leri bul
+            const keys: string[] = [];
+            let cursor = 0;
+
+            do {
+                const result = await redisClient.scan(cursor, {
+                    MATCH: `${this.CACHE_PREFIX}*`,
+                    COUNT: 100,
+                });
+
+                cursor = result.cursor;
+                keys.push(...result.keys);
+            } while (cursor !== 0);
+
+            console.log(`[StoreService] ${keys.length} adet cache key bulundu:`, keys);
+
+            // Bulunan key'leri sil
+            if (keys.length > 0) {
+                // DEL komutu ile toplu silme (daha hızlı)
+                await redisClient.del(keys);
+                console.log(`[StoreService] ✅ ${keys.length} adet cache key başarıyla silindi`);
             } else {
-                // Store client'a erişilemiyorsa, bilinen key'leri manuel temizle
-                await this.cacheManager.del(`${this.CACHE_PREFIX}categories`);
-                await this.cacheManager.del(`${this.CACHE_PREFIX}tags`);
+                console.log('[StoreService] Silinecek cache key bulunamadı');
             }
-        } catch (error) {
-            console.error('[StoreService] Cache temizleme hatası:', error);
-            // Hata durumunda en azından bilinen key'leri temizlemeyi dene
+
+            // Cache-manager üzerinden de silmeyi dene (ek güvence için)
+            for (const key of keys) {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (delError) {
+                    // Zaten Redis'ten silindi, cache-manager'dan silinemezse sorun değil
+                    console.debug(`[StoreService] Cache-manager'dan ${key} silinemedi (zaten Redis'ten silinmiş olabilir)`);
+                }
+            }
+
+            // Bilinen key'leri de manuel olarak temizle (ek güvence)
+            const knownKeys = [
+                `${this.CACHE_PREFIX}categories`,
+                `${this.CACHE_PREFIX}tags`,
+            ];
+
+            for (const key of knownKeys) {
+                try {
+                    await redisClient.del(key);
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    // Key yoksa sorun değil
+                }
+            }
+
+            console.log('[StoreService] ✅ Cache temizleme işlemi tamamlandı');
+
+        } catch (error: any) {
+            console.error('[StoreService] ❌ Cache temizleme hatası:', error.message);
+            console.error('[StoreService] Stack:', error.stack);
+
+            // Hata durumunda cache-manager üzerinden bilinen key'leri temizlemeyi dene
             try {
-                await this.cacheManager.del(`${this.CACHE_PREFIX}categories`);
-                await this.cacheManager.del(`${this.CACHE_PREFIX}tags`);
-            } catch (delError) {
-                console.error('[StoreService] Cache key silme hatası:', delError);
+                const knownKeys = [
+                    `${this.CACHE_PREFIX}categories`,
+                    `${this.CACHE_PREFIX}tags`,
+                ];
+
+                for (const key of knownKeys) {
+                    try {
+                        await this.cacheManager.del(key);
+                    } catch (delError) {
+                        console.error(`[StoreService] ${key} silinemedi:`, delError);
+                    }
+                }
+            } catch (fallbackError) {
+                console.error('[StoreService] Fallback cache temizleme de başarısız:', fallbackError);
+            }
+
+            throw error;
+        } finally {
+            // Redis client bağlantısını kapat
+            if (redisClient && redisClient.isOpen) {
+                try {
+                    await redisClient.quit();
+                } catch (quitError) {
+                    console.error('[StoreService] Redis client kapatma hatası:', quitError);
+                }
             }
         }
     }

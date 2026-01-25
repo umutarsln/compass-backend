@@ -41,7 +41,7 @@ export class CacheService implements OnModuleInit {
         let testClient: any = null;
         try {
             this.logger.log('[CacheService] Direkt Redis client ile bağlantı test ediliyor...');
-            
+
             testClient = createClient({
                 socket: {
                     host: redisHost,
@@ -71,10 +71,10 @@ export class CacheService implements OnModuleInit {
             // SET/GET testi
             const testKey = 'cache:connection:test:' + Date.now();
             const testValue = 'test-connection-' + Date.now();
-            
+
             await testClient.set(testKey, testValue, { EX: 5 });
             this.logger.log('[CacheService] ✅ Direkt Redis SET başarılı!');
-            
+
             const retrievedValue = await testClient.get(testKey);
             if (retrievedValue === testValue) {
                 this.logger.log('[CacheService] ✅ Direkt Redis GET başarılı!');
@@ -89,9 +89,9 @@ export class CacheService implements OnModuleInit {
 
         } catch (directError: any) {
             if (testClient && testClient.isOpen) {
-                await testClient.quit().catch(() => {});
+                await testClient.quit().catch(() => { });
             }
-            
+
             this.logger.error('='.repeat(60));
             this.logger.error('[CacheService] ❌❌❌ REDIS DİREKT BAĞLANTI HATASI ❌❌❌');
             this.logger.error(`[CacheService] Hata mesajı: ${directError.message}`);
@@ -126,7 +126,7 @@ export class CacheService implements OnModuleInit {
 
             // Get işlemi
             const retrievedValue = await this.cacheManager.get<string>(testKey);
-            
+
             if (retrievedValue === testValue) {
                 this.logger.log('[CacheService] ✅ Cache-manager GET başarılı!');
             } else {
@@ -139,10 +139,10 @@ export class CacheService implements OnModuleInit {
             // Redis client'a erişmeyi dene (opsiyonel - ek bilgi için)
             try {
                 const cacheStore = (this.cacheManager as any).store;
-                
+
                 if (cacheStore) {
                     this.logger.log('[CacheService] Cache store bulundu, Redis client bilgileri alınıyor...');
-                    
+
                     // Redis client'ı al - farklı yapılar için deneme
                     let client: any = null;
                     if (typeof cacheStore.getClient === 'function') {
@@ -157,7 +157,7 @@ export class CacheService implements OnModuleInit {
 
                     if (client) {
                         this.logger.log('[CacheService] Redis client bulundu');
-                        
+
                         // Redis server bilgilerini al
                         try {
                             const info = await new Promise<string>((resolve, reject) => {
