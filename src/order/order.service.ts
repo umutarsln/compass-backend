@@ -16,6 +16,11 @@ import { OrderStatus } from '../common/enums/order-status.enum';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderResponseDto, OrderItemResponseDto } from './dto/order-response.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { FolderService } from '../folder/folder.service';
+import { UploadService } from '../upload/upload.service';
+import { UserService } from '../user/user.service';
+import { S3Service } from '../upload/s3/s3.service';
+import { Upload } from '../upload/upload.entity';
 
 @Injectable()
 export class OrderService {
@@ -26,8 +31,14 @@ export class OrderService {
     private orderRepository: Repository<Order>,
     @InjectRepository(OrderItem)
     private orderItemRepository: Repository<OrderItem>,
+    @InjectRepository(Upload)
+    private uploadRepository: Repository<Upload>,
     private cartService: CartService,
     private dataSource: DataSource,
+    private folderService: FolderService,
+    private uploadService: UploadService,
+    private userService: UserService,
+    private s3Service: S3Service,
   ) {}
 
   /**
@@ -159,6 +170,17 @@ export class OrderService {
       // This allows the cart to be reused if payment fails
 
       await queryRunner.commitTransaction();
+
+      // Move personalization files from Sepetler/{cartId} to Siparişler/{orderNo}
+      try {
+        await this.movePersonalizationFilesToOrderFolder(cart.items, orderNo);
+      } catch (error) {
+        // Log error but don't fail the order creation
+        this.logger.error(
+          `[createOrder] Failed to move personalization files for order ${orderNo}:`,
+          error,
+        );
+      }
 
       // Load order with items
       const orderWithItems = await this.orderRepository.findOne({
@@ -468,5 +490,100 @@ export class OrderService {
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
     };
+  }
+
+  /**
+   * Move personalization files from Sepetler/{cartId} to Siparişler/{orderNo}
+   */
+  private async movePersonalizationFilesToOrderFolder(
+    cartItems: any[],
+    orderNo: string,
+  ): Promise<void> {
+    // Collect all file IDs from cart items' personalization
+    const fileIds = new Set<string>();
+
+    for (const item of cartItems) {
+      if (item.personalization?.userValues) {
+        const userValues = item.personalization.userValues;
+        // Extract file IDs from userValues (they can be strings or arrays)
+        Object.values(userValues).forEach((value) => {
+          if (Array.isArray(value)) {
+            value.forEach((id) => {
+              if (typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+                fileIds.add(id);
+              }
+            });
+          } else if (typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+            fileIds.add(value);
+          }
+        });
+      }
+    }
+
+    if (fileIds.size === 0) {
+      this.logger.log(`[movePersonalizationFilesToOrderFolder] No files to move for order ${orderNo}`);
+      return;
+    }
+
+    this.logger.log(
+      `[movePersonalizationFilesToOrderFolder] Moving ${fileIds.size} files to Siparişler/${orderNo}`,
+    );
+
+    // Get system user ID for folder creation
+    const admins = await this.userService.findAllAdmins();
+    const systemUserId = admins.length > 0 ? admins[0].id : null;
+    if (!systemUserId) {
+      this.logger.warn('[movePersonalizationFilesToOrderFolder] No admin user found, skipping file move');
+      return;
+    }
+
+    // Create or find "Siparişler" folder
+    const siparislerFolder = await this.folderService.findOrCreateFolder(
+      null,
+      'Siparişler',
+      systemUserId,
+    );
+
+    // Create or find "Siparişler/{orderNo}" folder
+    const orderFolder = await this.folderService.findOrCreateFolder(
+      'Siparişler',
+      orderNo,
+      systemUserId,
+    );
+
+    // Move each file
+    for (const fileId of fileIds) {
+      try {
+        const upload = await this.uploadService.findOne(fileId);
+        const oldS3Key = upload.s3Key;
+        
+        // Extract filename from old S3 key
+        const filename = oldS3Key.split('/').pop() || upload.filename;
+        const newS3Key = `${orderFolder.s3Prefix}${filename}`;
+
+        // Move file in S3
+        const newS3Url = await this.s3Service.moveFile(oldS3Key, newS3Key);
+
+        // Update upload entity
+        upload.s3Key = newS3Key;
+        upload.s3Url = newS3Url;
+        upload.folderId = orderFolder.id;
+        await this.uploadRepository.save(upload);
+
+        this.logger.log(
+          `[movePersonalizationFilesToOrderFolder] Moved file ${fileId} to ${newS3Key}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `[movePersonalizationFilesToOrderFolder] Failed to move file ${fileId}:`,
+          error,
+        );
+        // Continue with other files even if one fails
+      }
+    }
+
+    this.logger.log(
+      `[movePersonalizationFilesToOrderFolder] Successfully moved files for order ${orderNo}`,
+    );
   }
 }

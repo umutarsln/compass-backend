@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Folder } from './folder.entity';
 import { FolderService } from './folder.service';
@@ -9,7 +9,7 @@ import { UploadModule } from '../upload/upload.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Folder, Upload]),
-    UploadModule,
+    forwardRef(() => UploadModule),
   ],
   controllers: [FolderController],
   providers: [FolderService],

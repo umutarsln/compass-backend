@@ -3,6 +3,8 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -13,7 +15,10 @@ import { CreateUploadDto } from './dto/create-upload.dto';
 import { UpdateUploadDto } from './dto/update-upload.dto';
 import { S3Service } from './s3/s3.service';
 import { Folder } from '../folder/folder.entity';
+import { FolderService } from '../folder/folder.service';
 import { UploadOwnerType } from '../common/enums/upload-owner-type.enum';
+import { UserService } from '../user/user.service';
+import { Role } from '../common/enums/role.enum';
 
 @Injectable()
 export class UploadService {
@@ -28,6 +33,9 @@ export class UploadService {
     private s3Service: S3Service,
     private configService: ConfigService,
     private dataSource: DataSource,
+    @Inject(forwardRef(() => FolderService))
+    private folderService: FolderService,
+    private userService: UserService,
   ) {
     // Env'den dosya boyutu limitini al (default: 10MB)
     this.maxFileSize =
@@ -62,6 +70,43 @@ export class UploadService {
   }
 
   /**
+   * Sistem klasörleri için admin user ID'yi bulur veya ilk admin user'ı döndürür
+   */
+  private async getSystemUserId(): Promise<string> {
+    console.log('[UploadService] getSystemUserId called');
+    try {
+      console.log('[UploadService] Finding admin users...');
+      const admins = await this.userService.findAllAdmins();
+      console.log('[UploadService] Admin users found', { count: admins.length });
+      
+      if (admins.length > 0) {
+        console.log('[UploadService] Using first admin user', { adminId: admins[0].id });
+        return admins[0].id;
+      }
+      
+      // Eğer admin yoksa, ilk user'ı bul (fallback)
+      console.log('[UploadService] No admin found, trying to find any user...');
+      const users = await this.userService.findAll();
+      console.log('[UploadService] Users found', { count: users.length });
+      
+      if (users.length > 0) {
+        console.log('[UploadService] Using first user as fallback', { userId: users[0].id });
+        return users[0].id;
+      }
+      
+      console.error('[UploadService] No users found in system');
+      throw new BadRequestException('Sistem klasörleri için kullanıcı bulunamadı');
+    } catch (error: any) {
+      console.error('[UploadService] getSystemUserId failed', {
+        error,
+        errorMessage: error?.message,
+        errorStack: error?.stack,
+      });
+      throw error;
+    }
+  }
+
+  /**
    * S3 key'ini oluşturur
    */
   private generateS3Key(
@@ -70,10 +115,19 @@ export class UploadService {
     hash: string,
   ): string {
     const extension = filename.split('.').pop();
+    // Folder varsa s3Prefix kullan, yoksa default uploads/ kullan
     const folderPrefix = folder ? folder.s3Prefix : 'uploads/';
+    console.log('[UploadService] generateS3Key', {
+      hasFolder: !!folder,
+      folderPrefix,
+      folderId: folder?.id,
+      folderName: folder?.name,
+    });
     // Hash'in ilk 8 karakterini kullanarak unique dosya adı oluştur
     const uniqueFilename = `${hash.substring(0, 8)}-${Date.now()}.${extension}`;
-    return `${folderPrefix}${uniqueFilename}`;
+    const s3Key = `${folderPrefix}${uniqueFilename}`;
+    console.log('[UploadService] Generated S3 key', { s3Key });
+    return s3Key;
   }
 
   /**
@@ -101,67 +155,188 @@ export class UploadService {
     createdById: string | null,
     ownerType?: UploadOwnerType | null,
     ownerId?: string | null,
+    cartId?: string | null,
   ): Promise<Upload> {
-    // Dosya validasyonu
-    this.validateFile(file);
-
-    // Hash hesapla
-    const hash = this.calculateHash(file.buffer);
-
-    // Aynı hash'e sahip dosya var mı kontrol et
-    const existingUpload = await this.uploadRepository.findOne({
-      where: { hash },
-      relations: ['folder', 'createdBy'],
+    console.log('[UploadService] create called', {
+      fileName: file.originalname,
+      fileSize: file.size,
+      fileMimeType: file.mimetype,
+      createdById,
+      ownerType,
+      ownerId,
+      cartId,
+      folderId: createUploadDto.folderId,
     });
 
-    if (existingUpload) {
-      // Mevcut dosyayı döndür (yeni upload yapma)
-      return existingUpload;
-    }
+    try {
+      // Dosya validasyonu
+      console.log('[UploadService] Validating file...');
+      this.validateFile(file);
+      console.log('[UploadService] File validation passed');
 
-    // Folder kontrolü
-    let folder: Folder | null = null;
-    if (createUploadDto.folderId) {
-      folder = await this.folderRepository.findOne({
-        where: { id: createUploadDto.folderId },
+      // Hash hesapla
+      console.log('[UploadService] Calculating file hash...');
+      const hash = this.calculateHash(file.buffer);
+      console.log('[UploadService] File hash calculated', { hash: hash.substring(0, 16) + '...' });
+
+      // Aynı hash'e sahip dosya var mı kontrol et
+      console.log('[UploadService] Checking for existing file with same hash...');
+      const existingUpload = await this.uploadRepository.findOne({
+        where: { hash },
+        relations: ['folder', 'createdBy'],
       });
 
-      if (!folder) {
-        throw new NotFoundException('Klasör bulunamadı');
+      if (existingUpload) {
+        console.log('[UploadService] Existing file found, returning it', {
+          uploadId: existingUpload.id,
+          s3Key: existingUpload.s3Key,
+        });
+        // Mevcut dosyayı döndür (yeni upload yapma)
+        return existingUpload;
       }
+      console.log('[UploadService] No existing file found, proceeding with new upload');
+
+      // Folder kontrolü
+      let folder: Folder | null = null;
+      
+      // Cart ID varsa, Sepetler klasörü yapısını oluştur
+      // cartId null, undefined veya boş string değilse klasör oluştur
+      if (cartId && cartId.trim() !== '') {
+        console.log('[UploadService] Cart ID provided, creating/finding cart folder', { 
+          cartId,
+          cartIdLength: cartId.length,
+          cartIdType: typeof cartId,
+        });
+        console.log('[UploadService] Getting system user ID...');
+        const systemUserId = await this.getSystemUserId();
+        console.log('[UploadService] System user ID obtained', { systemUserId });
+        
+        // "Sepetler" klasörünü bul veya oluştur
+        console.log('[UploadService] Finding/creating "Sepetler" folder...');
+        const sepetlerFolder = await this.folderService.findOrCreateFolder(
+          null,
+          'Sepetler',
+          systemUserId,
+        );
+        console.log('[UploadService] "Sepetler" folder ready', {
+          folderId: sepetlerFolder.id,
+          s3Prefix: sepetlerFolder.s3Prefix,
+        });
+        
+        // "Sepetler/{cartId}" klasörünü bul veya oluştur
+        console.log('[UploadService] Finding/creating cart folder', { cartId });
+        folder = await this.folderService.findOrCreateFolder(
+          'Sepetler',
+          cartId.trim(), // Trim yapılmış cartId kullan
+          systemUserId,
+        );
+        console.log('[UploadService] Cart folder ready', {
+          folderId: folder.id,
+          folderName: folder.name,
+          s3Prefix: folder.s3Prefix,
+        });
+        
+        // Klasör oluşturma işleminin tamamlandığından emin ol
+        if (!folder || !folder.id || !folder.s3Prefix) {
+          console.error('[UploadService] Folder creation failed or incomplete', { folder });
+          throw new BadRequestException('Klasör oluşturulamadı veya eksik bilgi');
+        }
+        
+        console.log('[UploadService] Folder verified and ready for file upload', {
+          folderId: folder.id,
+          s3Prefix: folder.s3Prefix,
+        });
+      } else {
+        console.log('[UploadService] No cart ID provided', { 
+          cartId,
+          cartIdType: typeof cartId,
+          hasFolderId: !!createUploadDto.folderId,
+        });
+        
+        if (createUploadDto.folderId) {
+          console.log('[UploadService] Folder ID provided in DTO', { folderId: createUploadDto.folderId });
+          folder = await this.folderRepository.findOne({
+            where: { id: createUploadDto.folderId },
+          });
+
+          if (!folder) {
+            console.error('[UploadService] Folder not found', { folderId: createUploadDto.folderId });
+            throw new NotFoundException('Klasör bulunamadı');
+          }
+          console.log('[UploadService] Folder found', { folderId: folder.id, s3Prefix: folder.s3Prefix });
+        } else {
+          console.log('[UploadService] No folder specified, will use default uploads/ prefix');
+        }
+      }
+
+      // S3 key oluştur
+      console.log('[UploadService] Generating S3 key...');
+      const s3Key = this.generateS3Key(folder, file.originalname, hash);
+      console.log('[UploadService] S3 key generated', { s3Key });
+
+      // S3'e yükle
+      console.log('[UploadService] Uploading to S3...', {
+        s3Key,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+      });
+      const s3Url = await this.s3Service.uploadFile(
+        s3Key,
+        file.buffer,
+        file.mimetype,
+      );
+      console.log('[UploadService] S3 upload successful', { s3Url });
+
+      // Upload entity oluştur
+      console.log('[UploadService] Creating upload entity...', {
+        folderId: folder?.id || createUploadDto.folderId || null,
+        folderName: folder?.name,
+        s3Key,
+      });
+      const upload = this.uploadRepository.create({
+        filename: file.originalname,
+        displayName: createUploadDto.displayName || file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        sizeMB: this.bytesToMB(file.size),
+        s3Key,
+        s3Bucket: this.configService.get('AWS_S3_BUCKET') || '',
+        s3Url,
+        hash,
+        folderId: folder?.id || createUploadDto.folderId || null, // Folder ID'yi kaydet
+        seoTitle: createUploadDto.seoTitle,
+        seoDescription: createUploadDto.seoDescription,
+        seoKeywords: createUploadDto.seoKeywords,
+        createdById,
+        ownerType: ownerType || null,
+        ownerId: ownerId || null,
+      });
+
+      console.log('[UploadService] Saving upload entity to database...', {
+        uploadId: upload.id,
+        folderId: upload.folderId,
+        s3Key: upload.s3Key,
+      });
+      const savedUpload = await this.uploadRepository.save(upload);
+      console.log('[UploadService] Upload entity saved successfully', {
+        uploadId: savedUpload.id,
+        fileName: savedUpload.filename,
+        s3Url: savedUpload.s3Url,
+        folderId: savedUpload.folderId,
+      });
+
+      return savedUpload;
+    } catch (error: any) {
+      console.error('[UploadService] create failed', {
+        error,
+        errorMessage: error?.message,
+        errorStack: error?.stack,
+        errorName: error?.name,
+        fileName: file?.originalname,
+        cartId,
+      });
+      throw error;
     }
-
-    // S3 key oluştur
-    const s3Key = this.generateS3Key(folder, file.originalname, hash);
-
-    // S3'e yükle
-    const s3Url = await this.s3Service.uploadFile(
-      s3Key,
-      file.buffer,
-      file.mimetype,
-    );
-
-    // Upload entity oluştur
-    const upload = this.uploadRepository.create({
-      filename: file.originalname,
-      displayName: createUploadDto.displayName || file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      sizeMB: this.bytesToMB(file.size),
-      s3Key,
-      s3Bucket: this.configService.get('AWS_S3_BUCKET') || '',
-      s3Url,
-      hash,
-      folderId: createUploadDto.folderId || null,
-      seoTitle: createUploadDto.seoTitle,
-      seoDescription: createUploadDto.seoDescription,
-      seoKeywords: createUploadDto.seoKeywords,
-      createdById,
-      ownerType: ownerType || null,
-      ownerId: ownerId || null,
-    });
-
-    return await this.uploadRepository.save(upload);
   }
 
   async findAll(): Promise<Upload[]> {

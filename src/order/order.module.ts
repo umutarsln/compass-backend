@@ -6,11 +6,18 @@ import { OrderService } from './order.service';
 import { OrderController } from './order.controller';
 import { CartModule } from '../cart/cart.module';
 import { Cart } from '../cart/cart.entity';
+import { FolderModule } from '../folder/folder.module';
+import { UploadModule } from '../upload/upload.module';
+import { UserModule } from '../user/user.module';
+import { Upload } from '../upload/upload.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, OrderItem, Cart]),
+    TypeOrmModule.forFeature([Order, OrderItem, Cart, Upload]),
     CartModule,
+    FolderModule,
+    UploadModule,
+    UserModule,
   ],
   controllers: [OrderController],
   providers: [OrderService],

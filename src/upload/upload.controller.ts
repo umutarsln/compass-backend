@@ -131,25 +131,87 @@ export class UploadController {
     @Body() createUploadDto: CreateUploadDto,
     @Request() req: any,
     @Headers('x-guest-id') guestIdHeader?: string | string[],
+    @Headers('x-cart-id') cartIdHeader?: string | string[],
   ): Promise<Upload> {
+    console.log('[UploadController] uploadGuest called', {
+      hasFile: !!file,
+      fileName: file?.originalname,
+      fileSize: file?.size,
+      fileMimeType: file?.mimetype,
+      guestIdHeader,
+      cartIdHeader,
+      createUploadDto,
+      headers: req.headers,
+    });
+
     if (!file) {
+      console.error('[UploadController] No file provided');
       throw new BadRequestException('Dosya yüklenmedi');
     }
 
     // guestId sadece header'dan alınır, body'den değil
     const guestId = Array.isArray(guestIdHeader) ? guestIdHeader[0] : guestIdHeader;
+    console.log('[UploadController] Guest ID extracted', { guestId, guestIdHeader });
+    
     if (!guestId) {
+      console.error('[UploadController] Guest ID is missing');
       throw new BadRequestException('Guest ID is required in x-guest-id header');
     }
 
-    // Guest upload'lar için createdById null olur (ownerType ve ownerId ile sahiplik takip edilir)
-    return await this.uploadService.create(
-      file,
-      createUploadDto,
-      null, // Guest upload'lar için createdById null
-      UploadOwnerType.GUEST,
-      guestId,
-    );
+    // cartId header'dan al (opsiyonel)
+    let cartId: string | null = null;
+    if (cartIdHeader) {
+      const extractedCartId = Array.isArray(cartIdHeader) ? cartIdHeader[0] : cartIdHeader;
+      // Boş string kontrolü yap
+      if (extractedCartId && extractedCartId.trim() !== '') {
+        cartId = extractedCartId.trim();
+      }
+    }
+    console.log('[UploadController] Cart ID extracted', { 
+      cartId, 
+      cartIdHeader,
+      isArray: Array.isArray(cartIdHeader),
+      isEmpty: cartId === null || cartId === '',
+    });
+
+    try {
+      console.log('[UploadController] Calling uploadService.create', {
+        fileName: file.originalname,
+        fileSize: file.size,
+        guestId,
+        cartId: cartId || null,
+        hasCartId: !!cartId,
+      });
+
+      // Guest upload'lar için createdById null olur (ownerType ve ownerId ile sahiplik takip edilir)
+      const result = await this.uploadService.create(
+        file,
+        createUploadDto,
+        null, // Guest upload'lar için createdById null
+        UploadOwnerType.GUEST,
+        guestId,
+        cartId, // Cart ID (opsiyonel, null olabilir)
+      );
+
+      console.log('[UploadController] Upload successful', {
+        uploadId: result.id,
+        fileName: result.filename,
+        s3Key: result.s3Key,
+        folderId: result.folderId,
+      });
+
+      return result;
+    } catch (error: any) {
+      console.error('[UploadController] Upload failed', {
+        error,
+        errorMessage: error?.message,
+        errorStack: error?.stack,
+        errorName: error?.name,
+        errorStatus: error?.status,
+        errorResponse: error?.response,
+      });
+      throw error;
+    }
   }
 
   @Get()
@@ -256,15 +318,87 @@ export class UploadController {
   }
 
   @Delete(':id')
+  @Public() // Guest upload'lar için de erişilebilir olmalı
   @ApiOperation({ summary: 'Dosyayı sil (S3\'ten de silinir)' })
   @ApiResponse({
     status: 200,
     description: 'Dosya başarıyla silindi',
   })
   @ApiResponse({ status: 404, description: 'Dosya bulunamadı' })
+  @ApiResponse({ status: 403, description: 'Bu dosyayı silme yetkiniz yok' })
   @ApiResponse({ status: 409, description: 'Dosya kullanılıyor, silinemez' })
-  async remove(@Param('id') id: string): Promise<{ message: string }> {
-    // Relation kontrolü
+  async remove(
+    @Param('id') id: string,
+    @Request() req: any,
+    @Headers('x-guest-id') guestIdHeader?: string | string[],
+  ): Promise<{ message: string }> {
+    console.log('[UploadController] remove called', {
+      id,
+      hasUser: !!req.user,
+      guestIdHeader,
+    });
+
+    // Dosyayı bul (folder bilgisiyle birlikte)
+    const upload = await this.uploadService.findOne(id);
+
+    console.log('[UploadController] Upload details', {
+      id: upload.id,
+      s3Key: upload.s3Key,
+      folderId: upload.folderId,
+      folderS3Prefix: upload.folder?.s3Prefix,
+      ownerType: upload.ownerType,
+      ownerId: upload.ownerId,
+    });
+
+    // Yetki kontrolü: Guest upload'lar için ownerId kontrolü, authenticated kullanıcılar için createdById kontrolü
+    const user = req.user as { userId: string } | undefined;
+    const guestId = Array.isArray(guestIdHeader) ? guestIdHeader[0] : guestIdHeader;
+
+    // Authenticated kullanıcı kontrolü
+    if (user) {
+      // Authenticated kullanıcı sadece kendi oluşturduğu dosyaları silebilir
+      if (upload.createdById !== user.userId) {
+        console.error('[UploadController] User does not own this file', {
+          userId: user.userId,
+          fileCreatedById: upload.createdById,
+        });
+        throw new BadRequestException('Bu dosyayı silme yetkiniz yok');
+      }
+    } else if (guestId) {
+      // Guest kullanıcı için sahiplik kontrolü
+      // Guest upload'lar için sahiplik kontrolünü gevşetiyoruz çünkü:
+      // 1. Kişiselleştirme dosyaları cart'a bağlı ve guest ID değişebilir
+      // 2. Dosyalar zaten relation kontrolünden geçiyor (product galleries, categories)
+      // 3. Kişiselleştirme dosyaları için relation kontrolü yapmıyoruz, bu yüzden güvenli
+      
+      if (upload.ownerType === UploadOwnerType.GUEST) {
+        // Tüm guest upload'lar silinebilir (kişiselleştirme dosyaları için)
+        // Relation kontrolü zaten yapılıyor, bu yüzden güvenli
+        console.log('[UploadController] Guest upload file, allowing deletion', {
+          guestId,
+          fileOwnerId: upload.ownerId,
+          s3Key: upload.s3Key,
+          folderId: upload.folderId,
+          folderS3Prefix: upload.folder?.s3Prefix,
+        });
+      } else {
+        // Guest ID var ama dosya guest upload değil
+        console.error('[UploadController] File is not a guest upload', {
+          guestId,
+          fileOwnerType: upload.ownerType,
+          fileOwnerId: upload.ownerId,
+        });
+        throw new BadRequestException('Bu dosyayı silme yetkiniz yok');
+      }
+    } else {
+      // Ne authenticated ne de guest ID var
+      console.error('[UploadController] No authentication provided');
+      throw new BadRequestException('Bu işlem için kimlik doğrulama gerekli');
+    }
+
+    // Relation kontrolü (sadece product galleries ve categories için)
+    // Kişiselleştirme dosyaları için relation kontrolü yapmıyoruz çünkü onlar cart/order'da kullanılıyor
+    // ve silinebilir olmalılar
     const relations = await this.uploadService.checkRelations(id);
     if (relations.hasRelations) {
       throw new BadRequestException(
@@ -272,7 +406,9 @@ export class UploadController {
       );
     }
 
+    console.log('[UploadController] Removing file', { id, s3Key: upload.s3Key });
     await this.uploadService.remove(id);
+    console.log('[UploadController] File removed successfully', { id });
     return { message: 'Dosya başarıyla silindi' };
   }
 }

@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { Folder } from './folder.entity';
 import { CreateFolderDto } from './dto/create-folder.dto';
 import { UpdateFolderDto } from './dto/update-folder.dto';
@@ -94,6 +94,151 @@ export class FolderService {
     const folder = this.folderRepository.create({
       name: createFolderDto.name,
       slug,
+      description: createFolderDto.description,
+      parentId: createFolderDto.parentId || null,
+      createdById,
+    });
+
+    // Path ve S3 prefix hesapla
+    folder.path = await this.calculatePath(folder);
+    folder.s3Prefix = await this.calculateS3Prefix(folder);
+
+    return await this.folderRepository.save(folder);
+  }
+
+  /**
+   * Klasörü bul veya oluştur (parent-child hiyerarşisi ile)
+   * Sistem klasörleri için kullanılır (Sepetler, Siparişler vb.)
+   * 
+   * @param parentName Parent klasör adı (örn: "Sepetler", "Siparişler") veya null (root için)
+   * @param childName Child klasör adı (örn: cartId UUID, orderNo) - UUID veya slug formatında olabilir
+   * @param createdById Sistem kullanıcı ID'si
+   */
+  async findOrCreateFolder(
+    parentName: string | null,
+    childName: string,
+    createdById: string,
+  ): Promise<Folder> {
+    this.logger.log(`[findOrCreateFolder] Called with parentName: ${parentName}, childName: ${childName}, createdById: ${createdById}`);
+    
+    let parentFolder: Folder | null = null;
+
+    // Parent klasörü bul veya oluştur
+    if (parentName) {
+      this.logger.log(`[findOrCreateFolder] Looking for parent folder: ${parentName}`);
+      const parentSlug = generateSlug(parentName);
+      this.logger.log(`[findOrCreateFolder] Parent slug: ${parentSlug}`);
+      
+      parentFolder = await this.folderRepository.findOne({
+        where: { slug: parentSlug, parentId: IsNull() },
+      });
+
+      if (!parentFolder) {
+        this.logger.log(`[findOrCreateFolder] Parent folder not found, creating: ${parentName}`);
+        // Parent klasörü oluştur
+        const parentCreateDto: CreateFolderDto = {
+          name: parentName,
+          // parentId undefined for root folder
+        };
+        parentFolder = await this.create(parentCreateDto, createdById);
+        this.logger.log(`[findOrCreateFolder] Parent klasör oluşturuldu: ${parentName}`, {
+          folderId: parentFolder.id,
+          slug: parentFolder.slug,
+          s3Prefix: parentFolder.s3Prefix,
+        });
+      } else {
+        this.logger.log(`[findOrCreateFolder] Parent folder found: ${parentName}`, {
+          folderId: parentFolder.id,
+          slug: parentFolder.slug,
+          s3Prefix: parentFolder.s3Prefix,
+        });
+      }
+    }
+
+    // Child klasörü bul veya oluştur
+    this.logger.log(`[findOrCreateFolder] Looking for child folder: ${childName}`);
+    
+    // UUID formatında mı kontrol et (cartId veya orderNo için)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(childName);
+    // OrderNo formatında mı kontrol et (8 haneli)
+    const isOrderNo = /^[0-9]{8}$/.test(childName);
+    
+    // UUID veya orderNo ise direkt kullan, değilse slug oluştur
+    const childSlug = (isUUID || isOrderNo) ? childName : generateSlug(childName);
+    this.logger.log(`[findOrCreateFolder] Child slug: ${childSlug} (isUUID: ${isUUID}, isOrderNo: ${isOrderNo})`);
+    
+    const parentId = parentFolder?.id;
+
+    let childFolder = await this.folderRepository.findOne({
+      where: parentId 
+        ? { slug: childSlug, parentId }
+        : { slug: childSlug, parentId: IsNull() },
+    });
+
+    if (!childFolder) {
+      this.logger.log(`[findOrCreateFolder] Child folder not found, creating: ${childName}`);
+      // Child klasörü oluştur
+      const childCreateDto: CreateFolderDto = {
+        name: childName, // Display name olarak orijinal ismi kullan
+        parentId: parentId,
+      };
+      
+      // UUID veya orderNo için slug'ı direkt kullan (zaten unique'ler)
+      // Diğer durumlarda generateUniqueSlug kullanılacak
+      if (isUUID || isOrderNo) {
+        // UUID/orderNo için direkt slug kullan (unique oldukları için)
+        childFolder = await this.createWithSlug(childCreateDto, createdById, childSlug);
+      } else {
+        // Normal isimler için create metodunu kullan (generateUniqueSlug otomatik çağrılacak)
+        childFolder = await this.create(childCreateDto, createdById);
+      }
+      
+      this.logger.log(
+        `[findOrCreateFolder] Child klasör oluşturuldu: ${childName} (parent: ${parentName || 'root'})`,
+        {
+          folderId: childFolder.id,
+          slug: childFolder.slug,
+          s3Prefix: childFolder.s3Prefix,
+          parentId: childFolder.parentId,
+        },
+      );
+    } else {
+      this.logger.log(`[findOrCreateFolder] Child folder found: ${childName}`, {
+        folderId: childFolder.id,
+        slug: childFolder.slug,
+        s3Prefix: childFolder.s3Prefix,
+        parentId: childFolder.parentId,
+      });
+    }
+
+    return childFolder;
+  }
+
+  /**
+   * Belirli bir slug ile klasör oluştur (UUID veya orderNo için)
+   * UUID ve orderNo zaten unique olduğu için generateUniqueSlug kullanmaz
+   */
+  private async createWithSlug(
+    createFolderDto: CreateFolderDto,
+    createdById: string,
+    customSlug: string,
+  ): Promise<Folder> {
+    // Parent kontrolü
+    let parent: Folder | null = null;
+    if (createFolderDto.parentId) {
+      parent = await this.folderRepository.findOne({
+        where: { id: createFolderDto.parentId },
+      });
+
+      if (!parent) {
+        throw new NotFoundException('Üst klasör bulunamadı');
+      }
+    }
+
+    // Klasör oluştur (customSlug'ı direkt kullan)
+    const folder = this.folderRepository.create({
+      name: createFolderDto.name,
+      slug: customSlug, // UUID/orderNo için direkt kullan
       description: createFolderDto.description,
       parentId: createFolderDto.parentId || null,
       createdById,
