@@ -19,6 +19,7 @@ import { PaymentModule } from './payment/payment.module';
 import { MailModule } from './mail/mail.module';
 import { DocsModule } from './docs/docs.module';
 import { PersonalizationModule } from './personalization/personalization.module';
+import { CacheModule } from './cache/cache.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PersonalizationModule } from './personalization/personalization.module'
       isGlobal: true,
       envFilePath: '.env',
     }),
+    CacheModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

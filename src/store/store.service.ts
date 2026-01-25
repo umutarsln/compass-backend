@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets, In } from 'typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { Product } from '../product/product.entity';
 import { VariantCombination } from '../product/variant-combination.entity';
 import { VariantOption } from '../product/variant-option.entity';
@@ -17,6 +19,9 @@ import { PersonalizationService } from '../personalization/personalization.servi
 
 @Injectable()
 export class StoreService {
+    private readonly CACHE_PREFIX = 'store:';
+    private readonly CACHE_TTL = 3600; // 1 saat (saniye)
+
     constructor(
         @InjectRepository(Product)
         private productRepository: Repository<Product>,
@@ -29,6 +34,7 @@ export class StoreService {
         @InjectRepository(Tag)
         private tagRepository: Repository<Tag>,
         private personalizationService: PersonalizationService,
+        @Inject(CACHE_MANAGER) private cacheManager: Cache,
     ) { }
 
     /**
@@ -46,6 +52,15 @@ export class StoreService {
             page = 1,
             limit = 20,
         } = query;
+
+        // Cache key oluştur
+        const cacheKey = `${this.CACHE_PREFIX}products:${JSON.stringify(query)}`;
+        
+        // Cache'den kontrol et
+        const cached = await this.cacheManager.get<StoreProductListResponseDto>(cacheKey);
+        if (cached) {
+            return cached;
+        }
 
         // Kategori slug'larını ID'lere çevir ve tüm parent/child ID'lerini topla
         let allCategoryIds: string[] = [];
@@ -114,13 +129,18 @@ export class StoreService {
         const skip = (page - 1) * limit;
         const paginatedProducts = allProducts.slice(skip, skip + limit);
 
-        return {
+        const result = {
             products: paginatedProducts,
             total,
             page,
             limit,
             totalPages,
         };
+
+        // Cache'e kaydet
+        await this.cacheManager.set(cacheKey, result, this.CACHE_TTL * 1000);
+
+        return result;
     }
 
     /**
@@ -129,6 +149,14 @@ export class StoreService {
      * productId parametresi UUID, product slug veya variant combination slug olabilir
      */
     async getProductDetail(productId: string): Promise<StoreProductDetailResponseDto> {
+        // Cache key oluştur
+        const cacheKey = `${this.CACHE_PREFIX}product:${productId}`;
+        
+        // Cache'den kontrol et
+        const cached = await this.cacheManager.get<StoreProductDetailResponseDto>(cacheKey);
+        if (cached) {
+            return cached;
+        }
         // UUID formatını kontrol et (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
         let product: Product | null = null;
@@ -242,7 +270,7 @@ export class StoreService {
         if (product.type === ProductType.SIMPLE) {
             const baseGallery = this.getProductGallery(product);
             const price = this.calculatePrice(product);
-            return {
+            const result: StoreProductDetailResponseDto = {
                 productId: product.id,
                 name: product.name,
                 subtitle: product.subtitle,
@@ -250,7 +278,7 @@ export class StoreService {
                 description: product.description,
                 basePrice: Number(product.basePrice),
                 discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
-                type: 'SIMPLE',
+                type: 'SIMPLE' as const,
                 gallery: baseGallery,
                 categories: (product.categories || []).map((cat) => ({
                     id: cat.id,
@@ -280,6 +308,11 @@ export class StoreService {
                 createdAt: product.createdAt,
                 updatedAt: product.updatedAt,
             };
+
+            // Cache'e kaydet
+            await this.cacheManager.set(cacheKey, result, this.CACHE_TTL * 1000);
+
+            return result;
         }
 
         // Varyasyonlu ürün için
@@ -411,7 +444,7 @@ export class StoreService {
             displayGallery = this.getProductGallery(product);
         }
 
-        return {
+        const result: StoreProductDetailResponseDto = {
             productId: product.id,
             name: product.name,
             subtitle: product.subtitle,
@@ -419,7 +452,7 @@ export class StoreService {
             description: product.description,
                 basePrice: Number(product.basePrice),
                 discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
-            type: 'VARIANT',
+            type: 'VARIANT' as const,
             gallery: displayGallery,
             categories: (product.categories || []).map((cat) => ({
                 id: cat.id,
@@ -444,12 +477,25 @@ export class StoreService {
             createdAt: product.createdAt,
             updatedAt: product.updatedAt,
         };
+
+        // Cache'e kaydet
+        await this.cacheManager.set(cacheKey, result, this.CACHE_TTL * 1000);
+
+        return result;
     }
 
     /**
      * Kategorileri hiyerarşik ve orderlanmış şekilde getir
      */
     async getCategories(): Promise<Category[]> {
+        const cacheKey = `${this.CACHE_PREFIX}categories`;
+        
+        // Cache'den kontrol et
+        const cached = await this.cacheManager.get<Category[]>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
         const allCategories = await this.categoryRepository.find({
             where: { isActive: true },
             relations: ['parent', 'children', 'image'],
@@ -470,16 +516,34 @@ export class StoreService {
             };
         };
 
-        return rootCategories.map((root) => buildTree(root));
+        const result = rootCategories.map((root) => buildTree(root));
+
+        // Cache'e kaydet
+        await this.cacheManager.set(cacheKey, result, this.CACHE_TTL * 1000);
+
+        return result;
     }
 
     /**
      * Tag'leri renkleriyle birlikte getir
      */
     async getTags(): Promise<Tag[]> {
-        return await this.tagRepository.find({
+        const cacheKey = `${this.CACHE_PREFIX}tags`;
+        
+        // Cache'den kontrol et
+        const cached = await this.cacheManager.get<Tag[]>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        const result = await this.tagRepository.find({
             order: { createdAt: 'DESC' },
         });
+
+        // Cache'e kaydet
+        await this.cacheManager.set(cacheKey, result, this.CACHE_TTL * 1000);
+
+        return result;
     }
 
     /**
@@ -990,5 +1054,76 @@ export class StoreService {
         }
 
         return [...sortedInStock, ...sortedOutOfStock];
+    }
+
+    /**
+     * Store modülü için tüm cache'i temizle
+     * Redis'teki 'store:' prefix'li tüm key'leri siler
+     */
+    async clearCache(): Promise<void> {
+        try {
+            // cache-manager v5+ için Redis store'a erişim
+            const cacheStore = (this.cacheManager as any).store;
+            
+            if (cacheStore && typeof cacheStore.getClient === 'function') {
+                // Redis client'a eriş
+                const client = cacheStore.getClient();
+                
+                if (client && typeof client.keys === 'function') {
+                    // Redis client'tan tüm 'store:' ile başlayan key'leri bul
+                    const keys = await new Promise<string[]>((resolve, reject) => {
+                        client.keys(`${this.CACHE_PREFIX}*`, (err: Error | null, keys: string[]) => {
+                            if (err) reject(err);
+                            else resolve(keys || []);
+                        });
+                    });
+
+                    // Bulunan key'leri sil
+                    if (keys.length > 0) {
+                        await Promise.all(keys.map(key => this.cacheManager.del(key)));
+                    }
+                } else if (client && typeof client.scan === 'function') {
+                    // SCAN kullanarak pattern ile key'leri bul (Redis 2.8+)
+                    let cursor = '0';
+                    const keys: string[] = [];
+                    
+                    do {
+                        const result = await new Promise<[string, string[]]>((resolve, reject) => {
+                            client.scan(cursor, 'MATCH', `${this.CACHE_PREFIX}*`, 'COUNT', 100, (err: Error | null, result: [string, string[]]) => {
+                                if (err) reject(err);
+                                else resolve(result);
+                            });
+                        });
+                        
+                        cursor = result[0];
+                        keys.push(...result[1]);
+                    } while (cursor !== '0');
+                    
+                    // Bulunan key'leri sil
+                    if (keys.length > 0) {
+                        await Promise.all(keys.map(key => this.cacheManager.del(key)));
+                    }
+                } else {
+                    // Client'a erişilemiyorsa, bilinen cache key'lerini manuel temizle
+                    await this.cacheManager.del(`${this.CACHE_PREFIX}categories`);
+                    await this.cacheManager.del(`${this.CACHE_PREFIX}tags`);
+                    // Not: Product cache'leri dinamik olduğu için tam temizlik için
+                    // Redis'e direkt erişim gerekir veya tüm cache'i temizlemek gerekir
+                }
+            } else {
+                // Store client'a erişilemiyorsa, bilinen key'leri manuel temizle
+                await this.cacheManager.del(`${this.CACHE_PREFIX}categories`);
+                await this.cacheManager.del(`${this.CACHE_PREFIX}tags`);
+            }
+        } catch (error) {
+            console.error('[StoreService] Cache temizleme hatası:', error);
+            // Hata durumunda en azından bilinen key'leri temizlemeyi dene
+            try {
+                await this.cacheManager.del(`${this.CACHE_PREFIX}categories`);
+                await this.cacheManager.del(`${this.CACHE_PREFIX}tags`);
+            } catch (delError) {
+                console.error('[StoreService] Cache key silme hatası:', delError);
+            }
+        }
     }
 }

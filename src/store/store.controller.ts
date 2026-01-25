@@ -3,6 +3,8 @@ import {
     Get,
     Query,
     Param,
+    Delete,
+    UseGuards,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -10,6 +12,7 @@ import {
     ApiResponse,
     ApiQuery,
     ApiParam,
+    ApiBearerAuth,
 } from '@nestjs/swagger';
 import { StoreService } from './store.service';
 import { StoreProductQueryDto } from './dto/store-product-query.dto';
@@ -84,5 +87,28 @@ export class StoreController {
     })
     async getTags(): Promise<Tag[]> {
         return await this.storeService.getTags();
+    }
+
+    @Delete('cache')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Store modülü cache\'ini temizle',
+        description: 'Store modülü için Redis cache\'indeki tüm verileri temizler. Sadece admin kullanıcılar erişebilir.'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Cache başarıyla temizlendi',
+    })
+    @ApiResponse({
+        status: 401,
+        description: 'Unauthorized - Giriş yapmanız gerekiyor',
+    })
+    @ApiResponse({
+        status: 403,
+        description: 'Forbidden - Bu işlem için yetkiniz yok',
+    })
+    async clearCache(): Promise<{ message: string }> {
+        await this.storeService.clearCache();
+        return { message: 'Store cache başarıyla temizlendi' };
     }
 }
