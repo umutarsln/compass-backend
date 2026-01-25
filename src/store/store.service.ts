@@ -1092,7 +1092,7 @@ export class StoreService {
 
             // SCAN kullanarak tüm 'store:' prefix'li key'leri bul
             const keys: string[] = [];
-            let cursor = 0;
+            let cursor: string = '0';
 
             do {
                 const result = await redisClient.scan(cursor, {
@@ -1100,9 +1100,9 @@ export class StoreService {
                     COUNT: 100,
                 });
 
-                cursor = result.cursor;
+                cursor = String(result.cursor);
                 keys.push(...result.keys);
-            } while (cursor !== 0);
+            } while (cursor !== '0');
 
             console.log(`[StoreService] ${keys.length} adet cache key bulundu:`, keys);
 
