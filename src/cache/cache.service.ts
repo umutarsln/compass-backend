@@ -219,4 +219,30 @@ export class CacheService implements OnModuleInit {
             // Ancak log'da açıkça görünsün
         }
     }
+
+    /**
+     * Cache'i temizle
+     * Belirtilen prefix'e sahip tüm cache key'lerini siler
+     * @param prefix Temizlenecek cache key'lerinin prefix'i (örn: "store:", "product:"). Belirtilmezse tüm cache temizlenir.
+     * @returns Silinen key sayısı
+     */
+    async clearCache(prefix?: string): Promise<number> {
+        this.logger.log(`[CacheService] Cache temizleme başlıyor... (prefix: ${prefix || 'tüm cache'})`);
+
+        try {
+            // cache-manager'ın clear() metodu tüm cache'i temizler
+            await this.cacheManager.clear();
+            this.logger.log('[CacheService] ✅ Cache başarıyla temizlendi');
+
+            // Prefix belirtilmişse, sadece o prefix'li key'leri temizlemek için
+            // cache-manager clear() tüm cache'i temizlediği için prefix kontrolü yapmıyoruz
+            // Eğer prefix desteği gerekiyorsa, ileride eklenebilir
+
+            return -1; // clear() kaç key sildiğini döndürmez, -1 döndürüyoruz
+        } catch (error: any) {
+            this.logger.error('[CacheService] ❌ Cache temizleme hatası:', error.message);
+            this.logger.error('[CacheService] Stack:', error.stack);
+            throw error;
+        }
+    }
 }

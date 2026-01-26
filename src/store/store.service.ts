@@ -63,8 +63,9 @@ export class StoreService {
 
         // Cache'den kontrol et
         const cached = await this.cacheManager.get<StoreProductListResponseDto>(cacheKey);
-        console.log("CACHED", cached);
+        console.log("CACHED", JSON.stringify(cached)?.substring(0, 100));
         if (cached) {
+            console.log("CACHED FOUND");
             return cached;
         }
         console.log("CACHED NOT FOUND");
@@ -1063,118 +1064,4 @@ export class StoreService {
         return [...sortedInStock, ...sortedOutOfStock];
     }
 
-    /**
-     * Store modülü için tüm cache'i temizle
-     * Redis'teki 'store:' prefix'li tüm key'leri siler
-     */
-    async clearCache(): Promise<void> {
-        const redisHost = this.configService.get<string>('REDIS_HOST');
-        const redisPort = this.configService.get<number>('REDIS_PORT');
-        const redisPassword = this.configService.get<string>('REDIS_PASSWORD');
-        const redisDb = this.configService.get<number>('REDIS_DB');
-
-        let redisClient: any = null;
-
-        try {
-            // Direkt Redis client oluştur ve bağlan
-            redisClient = createClient({
-                socket: {
-                    host: redisHost,
-                    port: redisPort,
-                },
-                password: redisPassword || undefined,
-                database: redisDb,
-            });
-
-            // Hata event'lerini dinle
-            redisClient.on('error', (err: Error) => {
-                console.error('[StoreService] Redis client hatası:', err);
-            });
-
-            await redisClient.connect();
-            console.log('[StoreService] Redis client bağlantısı kuruldu, cache temizleme başlıyor...');
-
-            // SCAN kullanarak tüm 'store:' prefix'li key'leri bul
-            // Redis v5 client için scanIterator kullan (daha güvenli)
-            const keys: string[] = [];
-            
-            for await (const key of redisClient.scanIterator({
-                MATCH: `${this.CACHE_PREFIX}*`,
-                COUNT: 100,
-            })) {
-                keys.push(key);
-            }
-
-            console.log(`[StoreService] ${keys.length} adet cache key bulundu:`, keys);
-
-            // Bulunan key'leri sil
-            if (keys.length > 0) {
-                // DEL komutu ile toplu silme (daha hızlı)
-                await redisClient.del(keys);
-                console.log(`[StoreService] ✅ ${keys.length} adet cache key başarıyla silindi`);
-            } else {
-                console.log('[StoreService] Silinecek cache key bulunamadı');
-            }
-
-            // Cache-manager üzerinden de silmeyi dene (ek güvence için)
-            for (const key of keys) {
-                try {
-                    await this.cacheManager.del(key);
-                } catch (delError) {
-                    // Zaten Redis'ten silindi, cache-manager'dan silinemezse sorun değil
-                    console.debug(`[StoreService] Cache-manager'dan ${key} silinemedi (zaten Redis'ten silinmiş olabilir)`);
-                }
-            }
-
-            // Bilinen key'leri de manuel olarak temizle (ek güvence)
-            const knownKeys = [
-                `${this.CACHE_PREFIX}categories`,
-                `${this.CACHE_PREFIX}tags`,
-            ];
-
-            for (const key of knownKeys) {
-                try {
-                    await redisClient.del(key);
-                    await this.cacheManager.del(key);
-                } catch (error) {
-                    // Key yoksa sorun değil
-                }
-            }
-
-            console.log('[StoreService] ✅ Cache temizleme işlemi tamamlandı');
-
-        } catch (error: any) {
-            console.error('[StoreService] ❌ Cache temizleme hatası:', error.message);
-            console.error('[StoreService] Stack:', error.stack);
-
-            // Hata durumunda cache-manager üzerinden bilinen key'leri temizlemeyi dene
-            try {
-                const knownKeys = [
-                    `${this.CACHE_PREFIX}categories`,
-                    `${this.CACHE_PREFIX}tags`,
-                ];
-
-                for (const key of knownKeys) {
-                    try {
-                        await this.cacheManager.del(key);
-                    } catch (delError) {
-                        console.error(`[StoreService] ${key} silinemedi:`, delError);
-                    }
-                }
-            } catch (fallbackError) {
-                console.error('[StoreService] Fallback cache temizleme de başarısız:', fallbackError);
-            }
-
-            throw error;
-        } finally {
-            // Redis client bağlantısını kapat
-            if (redisClient && redisClient.isOpen) {
-                try {
-                    await redisClient.quit();
-                } catch (quitError) {
-                    console.error('[StoreService] Redis client kapatma hatası:', quitError);
-                }
-            }
-        }
-    }
 }

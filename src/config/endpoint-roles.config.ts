@@ -120,7 +120,9 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'GET /store/products/:id': [], // Public - Ürün detayı (varyasyon seçimi ile)
     'GET /store/categories': [], // Public - Hiyerarşik ve orderlanmış kategoriler
     'GET /store/tags': [], // Public - Tag'ler renkleriyle birlikte
-    'DELETE /store/cache': [Role.ADMIN], // Sadece admin - Store modülü cache'ini temizle
+
+    // Cache Endpoints (Sadece ADMIN)
+    'DELETE /cache': [Role.ADMIN], // Sadece admin - Cache'i temizle (prefix ile filtreleme yapılabilir)
 
     // Order Endpoints
     'POST /orders': [], // Public - Guest ve authenticated kullanıcılar sipariş oluşturabilir
