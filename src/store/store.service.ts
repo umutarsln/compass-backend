@@ -59,11 +59,15 @@ export class StoreService {
         // Cache key oluştur
         const cacheKey = `${this.CACHE_PREFIX}products:${JSON.stringify(query)}`;
 
+        console.log("CACHE KEY", cacheKey);
+
         // Cache'den kontrol et
         const cached = await this.cacheManager.get<StoreProductListResponseDto>(cacheKey);
+        console.log("CACHED", cached);
         if (cached) {
             return cached;
         }
+        console.log("CACHED NOT FOUND");
 
         // Kategori slug'larını ID'lere çevir ve tüm parent/child ID'lerini topla
         let allCategoryIds: string[] = [];
@@ -1091,18 +1095,15 @@ export class StoreService {
             console.log('[StoreService] Redis client bağlantısı kuruldu, cache temizleme başlıyor...');
 
             // SCAN kullanarak tüm 'store:' prefix'li key'leri bul
+            // Redis v5 client için scanIterator kullan (daha güvenli)
             const keys: string[] = [];
-            let cursor: string = '0';
-
-            do {
-                const result = await redisClient.scan(cursor, {
-                    MATCH: `${this.CACHE_PREFIX}*`,
-                    COUNT: 100,
-                });
-
-                cursor = String(result.cursor);
-                keys.push(...result.keys);
-            } while (cursor !== '0');
+            
+            for await (const key of redisClient.scanIterator({
+                MATCH: `${this.CACHE_PREFIX}*`,
+                COUNT: 100,
+            })) {
+                keys.push(key);
+            }
 
             console.log(`[StoreService] ${keys.length} adet cache key bulundu:`, keys);
 
