@@ -10,10 +10,11 @@ import { FolderModule } from '../folder/folder.module';
 import { UploadModule } from '../upload/upload.module';
 import { UserModule } from '../user/user.module';
 import { Upload } from '../upload/upload.entity';
+import { PaymentAttempt } from '../payment/payment-attempt.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, OrderItem, Cart, Upload]),
+    TypeOrmModule.forFeature([Order, OrderItem, Cart, Upload, PaymentAttempt]),
     CartModule,
     FolderModule,
     UploadModule,

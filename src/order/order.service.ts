@@ -21,6 +21,9 @@ import { UploadService } from '../upload/upload.service';
 import { UserService } from '../user/user.service';
 import { S3Service } from '../upload/s3/s3.service';
 import { Upload } from '../upload/upload.entity';
+import { PaymentAttempt } from '../payment/payment-attempt.entity';
+import { PaymentStatus } from '../common/enums/payment-status.enum';
+import { PaymentProvider } from '../common/enums/payment-provider.enum';
 
 @Injectable()
 export class OrderService {
@@ -33,6 +36,8 @@ export class OrderService {
     private orderItemRepository: Repository<OrderItem>,
     @InjectRepository(Upload)
     private uploadRepository: Repository<Upload>,
+    @InjectRepository(PaymentAttempt)
+    private paymentAttemptRepository: Repository<PaymentAttempt>,
     private cartService: CartService,
     private dataSource: DataSource,
     private folderService: FolderService,
@@ -188,7 +193,7 @@ export class OrderService {
         relations: ['items', 'items.product', 'items.variant'],
       });
 
-      return this.mapToResponseDto(orderWithItems!);
+      return await this.mapToResponseDto(orderWithItems!);
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -235,7 +240,7 @@ export class OrderService {
 
     // Guest orders are accessible without authentication
     this.logger.debug(`[getOrder] Order ${orderId} accessed - isGuest: ${!order.userId}, requestUserId: ${userId || 'guest'}`);
-    return this.mapToResponseDto(order);
+    return await this.mapToResponseDto(order);
   }
 
   /**
@@ -276,7 +281,7 @@ export class OrderService {
     this.logger.debug(`[getOrderByOrderNo] Order ${order.orderNo} accessed - isGuest: ${!order.userId}, requestUserId: ${userId || 'guest'}`);
 
     this.logger.log(`[getOrderByOrderNo] Order found: ${order.id}, orderNo: ${order.orderNo}`);
-    return this.mapToResponseDto(order);
+    return await this.mapToResponseDto(order);
   }
 
   /**
@@ -289,7 +294,7 @@ export class OrderService {
       order: { createdAt: 'DESC' },
     });
 
-    return orders.map((order) => this.mapToResponseDto(order));
+    return Promise.all(orders.map((order) => this.mapToResponseDto(order)));
   }
 
   /**
@@ -352,7 +357,7 @@ export class OrderService {
     const [orders, total] = await queryBuilder.getManyAndCount();
 
     return {
-      orders: orders.map((order) => this.mapToResponseDto(order)),
+      orders: await Promise.all(orders.map((order) => this.mapToResponseDto(order))),
       total,
     };
   }
@@ -376,7 +381,7 @@ export class OrderService {
     order.status = updateDto.status;
     const updatedOrder = await this.orderRepository.save(order);
 
-    return this.mapToResponseDto(updatedOrder);
+    return await this.mapToResponseDto(updatedOrder);
   }
 
   /**
@@ -408,7 +413,24 @@ export class OrderService {
   /**
    * Map order entity to response DTO
    */
-  private mapToResponseDto(order: Order): OrderResponseDto {
+  private async mapToResponseDto(order: Order): Promise<OrderResponseDto> {
+    // Get payment provider from the most recent successful payment attempt
+    let paymentProvider: PaymentProvider | null = null;
+    try {
+      const paymentAttempt = await this.paymentAttemptRepository.findOne({
+        where: {
+          orderId: order.id,
+          status: PaymentStatus.SUCCESS,
+        },
+        order: { createdAt: 'DESC' },
+      });
+      if (paymentAttempt) {
+        paymentProvider = paymentAttempt.provider;
+      }
+    } catch (error) {
+      this.logger.warn(`[mapToResponseDto] Failed to get payment provider for order ${order.id}: ${error}`);
+    }
+
     return {
       id: order.id,
       orderNo: order.orderNo,
@@ -427,6 +449,7 @@ export class OrderService {
       shippingAddress: order.shippingAddress,
       billingAddress: order.billingAddress,
       notes: order.notes,
+      paymentProvider,
       items: order.items?.map((item) => {
         const itemDto: any = {
           id: item.id,

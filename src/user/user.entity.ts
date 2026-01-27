@@ -24,8 +24,8 @@ export class User {
     @Column()
     password: string;
 
-    @Column({ unique: true })
-    phone: string;
+    @Column({ type: 'varchar', unique: true, nullable: true })
+    phone: string | null;
 
     @Column({
         type: 'simple-array',

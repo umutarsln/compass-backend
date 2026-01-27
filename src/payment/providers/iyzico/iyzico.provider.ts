@@ -19,8 +19,10 @@ export class IyzicoProvider implements PaymentProvider {
     private httpClient: IyzicoHttpClient;
     private callbackUrl: string;
     private webhookUrl: string;
+    private settings: any = null;
 
     constructor(private configService: ConfigService) {
+        // İlk başta config service'ten al (fallback)
         const apiKey = this.configService.get<string>('IYZICO_API_KEY');
         const secretKey = this.configService.get<string>('IYZICO_SECRET_KEY');
         const baseUrl = this.configService.get<string>('IYZICO_BASE_URL') || 'https://api.iyzipay.com';
@@ -28,15 +30,39 @@ export class IyzicoProvider implements PaymentProvider {
         const callbackPath = this.configService.get<string>('IYZICO_PAYMENT_CALLBACK_PATH') || '/payments/iyzico/callback';
         const webhookPath = this.configService.get<string>('IYZICO_PAYMENT_WEBHOOK_PATH') || '/payments/iyzico/webhook';
 
-        if (!apiKey || !secretKey) {
-            this.logger.error('IYZICO_API_KEY and IYZICO_SECRET_KEY must be set');
-            throw new Error('IYZICO_API_KEY and IYZICO_SECRET_KEY must be set');
+        // Eğer config'de varsa kullan, yoksa settings'ten alınacak
+        if (apiKey && secretKey) {
+            this.httpClient = new IyzicoHttpClient(apiKey, secretKey, baseUrl, this.logger);
+            this.callbackUrl = `${appPublicUrl}${callbackPath}`;
+            this.webhookUrl = `${appPublicUrl}${webhookPath}`;
+            this.logger.log(`IyzicoProvider initialized from config - baseUrl: ${baseUrl}`);
+        } else {
+            this.logger.log('IyzicoProvider initialized - settings will be set later');
         }
+    }
 
-        this.httpClient = new IyzicoHttpClient(apiKey, secretKey, baseUrl, this.logger);
-        this.callbackUrl = `${appPublicUrl}${callbackPath}`;
-        this.webhookUrl = `${appPublicUrl}${webhookPath}`;
-        this.logger.log(`IyzicoProvider initialized - baseUrl: ${baseUrl}, callbackUrl: ${this.callbackUrl}, webhookUrl: ${this.webhookUrl}`);
+    /**
+     * Set payment settings (called from PaymentService)
+     */
+    setSettings(settings: any): void {
+        this.settings = settings;
+        
+        // Settings'ten Iyzico bilgilerini al
+        const apiKey = settings.iyzicoApiKey || this.configService.get<string>('IYZICO_API_KEY');
+        const secretKey = settings.iyzicoSecretKey || this.configService.get<string>('IYZICO_SECRET_KEY');
+        const baseUrl = settings.iyzicoBaseUrl || this.configService.get<string>('IYZICO_BASE_URL') || 'https://api.iyzipay.com';
+        const appPublicUrl = this.configService.get<string>('APP_PUBLIC_URL');
+        const callbackPath = this.configService.get<string>('IYZICO_PAYMENT_CALLBACK_PATH') || '/payments/iyzico/callback';
+        const webhookPath = this.configService.get<string>('IYZICO_PAYMENT_WEBHOOK_PATH') || '/payments/iyzico/webhook';
+
+        if (apiKey && secretKey) {
+            this.httpClient = new IyzicoHttpClient(apiKey, secretKey, baseUrl, this.logger);
+            this.callbackUrl = `${appPublicUrl}${callbackPath}`;
+            this.webhookUrl = `${appPublicUrl}${webhookPath}`;
+            this.logger.log(`IyzicoProvider settings updated - baseUrl: ${baseUrl}`);
+        } else {
+            this.logger.warn('IyzicoProvider settings incomplete - API key or secret key missing');
+        }
     }
 
     /**

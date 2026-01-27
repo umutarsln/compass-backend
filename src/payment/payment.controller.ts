@@ -94,4 +94,18 @@ export class PaymentController {
             res.status(HttpStatus.OK).send('OK');
         }
     }
+
+    /**
+     * Get IBAN information for IBAN EFT payment
+     */
+    @Post('iban-eft/info')
+    async getIbanInfo(): Promise<{
+        iban: string;
+        accountName: string;
+        bankName: string;
+        whatsappNumber: string | null;
+    } | null> {
+        this.logger.log(`[getIbanInfo] Getting IBAN EFT information`);
+        return await this.paymentService.getIbanInfo();
+    }
 }

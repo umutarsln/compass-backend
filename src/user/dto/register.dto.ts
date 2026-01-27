@@ -3,6 +3,7 @@ import {
     IsNotEmpty,
     IsString,
     MinLength,
+    IsOptional,
     Validate,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
@@ -44,11 +45,12 @@ export class RegisterDto {
     password: string;
 
     @ApiProperty({
-        description: 'Telefon numarası (uluslararası format)',
+        description: 'Kullanıcı telefon numarası (opsiyonel)',
         example: '+905551234567',
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsString()
     @Validate(PhoneNumberValidator)
-    phone: string;
+    phone?: string | null;
 }

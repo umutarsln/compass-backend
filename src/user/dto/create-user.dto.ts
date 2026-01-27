@@ -3,6 +3,7 @@ import {
     IsNotEmpty,
     IsString,
     MinLength,
+    IsOptional,
     Validate,
     ValidatorConstraint,
     ValidatorConstraintInterface,
@@ -61,9 +62,10 @@ export class CreateUserDto {
     @ApiProperty({
         description: 'Telefon numarası (uluslararası format)',
         example: '+905551234567',
+        required: false,
     })
-    @IsNotEmpty()
+    @IsOptional()
     @IsString()
     @Validate(PhoneNumberValidator)
-    phone: string;
+    phone?: string | null;
 }

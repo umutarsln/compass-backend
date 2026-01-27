@@ -52,7 +52,7 @@ export class CacheController {
     async clearCache(@Query('prefix') prefix?: string): Promise<{ message: string; deletedKeys: number }> {
         const deletedKeys = await this.cacheService.clearCache(prefix);
         return {
-            message: prefix 
+            message: prefix
                 ? `"${prefix}" prefix'ine sahip cache başarıyla temizlendi`
                 : 'Tüm cache başarıyla temizlendi',
             deletedKeys,

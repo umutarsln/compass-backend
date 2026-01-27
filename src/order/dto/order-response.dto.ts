@@ -1,5 +1,6 @@
 import { OrderStatus } from '../../common/enums/order-status.enum';
 import { Currency } from '../../common/enums/currency.enum';
+import { PaymentProvider } from '../../common/enums/payment-provider.enum';
 
 export class OrderItemResponseDto {
   id: string;
@@ -69,6 +70,7 @@ export class OrderResponseDto {
   billingAddress: any;
   notes: string | null;
   items: OrderItemResponseDto[];
+  paymentProvider: PaymentProvider | null; // Ödeme yöntemi
   createdAt: Date;
   updatedAt: Date;
 }

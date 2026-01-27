@@ -29,20 +29,26 @@ export class UserService {
             throw new ConflictException('Bu email adresi zaten kullanılıyor');
         }
 
-        // Telefon kontrolü
-        const existingUserByPhone = await this.userRepository.findOne({
-            where: { phone: createUserDto.phone },
-        });
+        // Telefon kontrolü (sadece phone null değilse)
+        if (createUserDto.phone) {
+            const phoneValue: string = createUserDto.phone;
+            const existingUserByPhone = await this.userRepository.findOne({
+                where: { phone: phoneValue },
+            });
 
-        if (existingUserByPhone) {
-            throw new ConflictException('Bu telefon numarası zaten kullanılıyor');
+            if (existingUserByPhone) {
+                throw new ConflictException('Bu telefon numarası zaten kullanılıyor');
+            }
         }
 
         const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
         const user = this.userRepository.create({
-            ...createUserDto,
+            firstname: createUserDto.firstname,
+            lastname: createUserDto.lastname,
+            email: createUserDto.email,
             password: hashedPassword,
+            phone: createUserDto.phone || null,
             roles: [Role.USER], // Default rol
         });
 
@@ -60,9 +66,9 @@ export class UserService {
         const allUsers = await this.userRepository.find({
             select: ['id', 'firstname', 'lastname', 'email', 'phone', 'roles', 'createdAt', 'updatedAt'],
         });
-        
+
         // ADMIN rolüne sahip olmayan kullanıcıları filtrele
-        return allUsers.filter(user => 
+        return allUsers.filter(user =>
             !user.roles || !user.roles.includes(Role.ADMIN)
         );
     }
@@ -186,7 +192,7 @@ export class UserService {
         return await this.userRepository.find({
             where: {},
             select: ['id', 'firstname', 'lastname', 'email', 'phone', 'roles', 'createdAt', 'updatedAt'],
-        }).then(users => 
+        }).then(users =>
             users.filter(user => user.roles && user.roles.includes(Role.ADMIN))
         );
     }
@@ -204,20 +210,26 @@ export class UserService {
             throw new ConflictException('Bu email adresi zaten kullanılıyor');
         }
 
-        // Telefon kontrolü
-        const existingUserByPhone = await this.userRepository.findOne({
-            where: { phone: createUserDto.phone },
-        });
+        // Telefon kontrolü (sadece phone null değilse)
+        if (createUserDto.phone) {
+            const phoneValue: string = createUserDto.phone;
+            const existingUserByPhone = await this.userRepository.findOne({
+                where: { phone: phoneValue },
+            });
 
-        if (existingUserByPhone) {
-            throw new ConflictException('Bu telefon numarası zaten kullanılıyor');
+            if (existingUserByPhone) {
+                throw new ConflictException('Bu telefon numarası zaten kullanılıyor');
+            }
         }
 
         const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
         const user = this.userRepository.create({
-            ...createUserDto,
+            firstname: createUserDto.firstname,
+            lastname: createUserDto.lastname,
+            email: createUserDto.email,
             password: hashedPassword,
+            phone: createUserDto.phone || null,
             roles: [Role.ADMIN], // Admin rolü ile oluştur
         });
 

@@ -124,6 +124,16 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     // Cache Endpoints (Sadece ADMIN)
     'DELETE /cache': [Role.ADMIN], // Sadece admin - Cache'i temizle (prefix ile filtreleme yapılabilir)
 
+    // Payment Endpoints
+    'POST /payments/checkout': [], // Public - Guest ve authenticated kullanıcılar ödeme başlatabilir
+    'POST /payments/iban-eft/info': [], // Public - IBAN EFT bilgilerini getir
+    'POST /payments/iyzico/callback': [], // Public - Iyzico callback (iyzico'dan gelir)
+    'POST /payments/iyzico/webhook': [], // Public - Iyzico webhook (iyzico'dan gelir)
+
+    // Payment Settings Endpoints
+    'GET /payment-settings': [], // Public - Ödeme ayarlarını getir (hangi ödeme yöntemleri aktif)
+    'PATCH /payment-settings': [Role.ADMIN], // Sadece admin - Ödeme ayarlarını güncelle
+
     // Order Endpoints
     'POST /orders': [], // Public - Guest ve authenticated kullanıcılar sipariş oluşturabilir
     'GET /orders/:id': [], // Public - Guest ve authenticated kullanıcılar siparişlerini görebilir (orderId veya orderNo ile)

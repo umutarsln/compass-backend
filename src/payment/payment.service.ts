@@ -17,6 +17,8 @@ import { CheckoutDto } from './dto/checkout.dto';
 import { CheckoutResponseDto } from './dto/checkout-response.dto';
 import { PaymentProvider as PaymentProviderInterface } from './providers/payment-provider.interface';
 import { IyzicoProvider } from './providers/iyzico/iyzico.provider';
+import { IbanEftProvider } from './providers/iban-eft/iban-eft.provider';
+import { PaymentSettingsService } from './payment-settings.service';
 import { CartService } from '../cart/cart.service';
 import { MailService, OrderItemWithImage } from '../mail/mail.service';
 import * as crypto from 'crypto';
@@ -35,12 +37,41 @@ export class PaymentService {
         private cartService: CartService,
         private mailService: MailService,
         private configService: ConfigService,
+        private paymentSettingsService: PaymentSettingsService,
         private iyzicoProvider: IyzicoProvider,
+        private ibanEftProvider: IbanEftProvider,
     ) {
         // Register providers
         this.providers = new Map();
         this.providers.set(PaymentProvider.IYZICO, iyzicoProvider);
-        this.logger.log('PaymentService initialized with providers: IYZICO');
+        this.providers.set(PaymentProvider.IBAN_EFT, ibanEftProvider);
+        this.logger.log('PaymentService initialized with providers: IYZICO, IBAN_EFT');
+        
+        // Initialize providers with settings
+        this.initializeProviders();
+    }
+
+    /**
+     * Initialize providers with payment settings
+     */
+    private async initializeProviders(): Promise<void> {
+        try {
+            const settings = await this.paymentSettingsService.getSettings();
+            
+            // Iyzico provider'a settings'i set et
+            if (this.iyzicoProvider && typeof (this.iyzicoProvider as any).setSettings === 'function') {
+                (this.iyzicoProvider as any).setSettings(settings);
+            }
+            
+            // IBAN EFT provider'a settings'i set et
+            if (this.ibanEftProvider && typeof (this.ibanEftProvider as any).setSettings === 'function') {
+                (this.ibanEftProvider as any).setSettings(settings);
+            }
+            
+            this.logger.log('[initializeProviders] Providers initialized with settings');
+        } catch (error: any) {
+            this.logger.warn('[initializeProviders] Failed to initialize providers with settings:', error.message);
+        }
     }
 
     /**
@@ -120,6 +151,19 @@ export class PaymentService {
                 PaymentProvider.IYZICO;
 
             this.logger.log(`[createCheckout] Using payment provider: ${provider}`);
+
+            // Provider için settings'i güncelle
+            const settings = await this.paymentSettingsService.getSettings();
+            
+            if (provider === PaymentProvider.IYZICO) {
+                if (this.iyzicoProvider && typeof (this.iyzicoProvider as any).setSettings === 'function') {
+                    (this.iyzicoProvider as any).setSettings(settings);
+                }
+            } else if (provider === PaymentProvider.IBAN_EFT) {
+                if (this.ibanEftProvider && typeof (this.ibanEftProvider as any).setSettings === 'function') {
+                    (this.ibanEftProvider as any).setSettings(settings);
+                }
+            }
 
             const providerInstance = this.getProvider(provider);
 
@@ -616,6 +660,36 @@ export class PaymentService {
             this.logger.log(`[handleWebhook] Webhook processed successfully for attempt ${attempt.id}`);
         } catch (error) {
             this.logger.error(`[handleWebhook] Error processing webhook: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    /**
+     * Get IBAN information for IBAN EFT payment
+     */
+    async getIbanInfo(): Promise<{
+        iban: string;
+        accountName: string;
+        bankName: string;
+        whatsappNumber: string | null;
+    } | null> {
+        this.logger.log('[getIbanInfo] Getting IBAN EFT information');
+        
+        try {
+            // Settings'i güncelle
+            const settings = await this.paymentSettingsService.getSettings();
+            if (this.ibanEftProvider && typeof (this.ibanEftProvider as any).setSettings === 'function') {
+                (this.ibanEftProvider as any).setSettings(settings);
+            }
+            
+            // IBAN bilgilerini al
+            if (this.ibanEftProvider && typeof (this.ibanEftProvider as any).getIbanInfo === 'function') {
+                return (this.ibanEftProvider as any).getIbanInfo();
+            }
+            
+            return null;
+        } catch (error: any) {
+            this.logger.error(`[getIbanInfo] Error getting IBAN info: ${error.message}`);
             throw error;
         }
     }

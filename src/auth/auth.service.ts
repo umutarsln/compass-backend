@@ -27,7 +27,13 @@ export class AuthService {
     refreshToken: string;
   }> {
     try {
-      const user = await this.userService.create(registerDto);
+      const user = await this.userService.create({
+        firstname: registerDto.firstname,
+        lastname: registerDto.lastname,
+        email: registerDto.email,
+        password: registerDto.password,
+        phone: registerDto.phone || null,
+      });
       const tokens = await this.generateTokens(user);
       const { password, ...userWithoutPassword } = user;
       return {
