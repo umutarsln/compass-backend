@@ -1,0 +1,8 @@
+export enum AnalyticsEventType {
+    PRODUCT_VIEW = 'PRODUCT_VIEW',
+    PRODUCT_TIME = 'PRODUCT_TIME',
+    CART_ADD = 'CART_ADD',
+    PAGE_VIEW = 'PAGE_VIEW',
+    ORDER_START = 'ORDER_START',
+    ORDER_COMPLETE = 'ORDER_COMPLETE',
+}

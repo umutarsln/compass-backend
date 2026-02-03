@@ -139,6 +139,16 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'GET /store/products/:id': [], // Public - Ürün detayı (varyasyon seçimi ile)
     'GET /store/categories': [], // Public - Hiyerarşik ve orderlanmış kategoriler
     'GET /store/tags': [], // Public - Tag'ler renkleriyle birlikte
+    'POST /store/analytics/events': [], // Public - Mağaza analitik event'leri (fire-and-forget)
+
+    // Analytics Endpoints (Admin only)
+    'POST /analytics/aggregate': [Role.ADMIN],
+    'GET /analytics/products/:id': [Role.ADMIN],
+    'GET /analytics/products': [Role.ADMIN],
+    'GET /analytics/store/daily': [Role.ADMIN],
+    'GET /analytics/store/summary': [Role.ADMIN],
+    'GET /analytics/store/insights': [Role.ADMIN],
+    'GET /analytics/events': [Role.ADMIN],
 
     // Cache Endpoints (Sadece ADMIN)
     'DELETE /cache': [Role.ADMIN], // Sadece admin - Cache'i temizle (prefix ile filtreleme yapılabilir)

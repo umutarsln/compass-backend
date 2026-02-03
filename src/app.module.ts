@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UserModule } from './user/user.module';
@@ -21,6 +22,7 @@ import { MailModule } from './mail/mail.module';
 import { DocsModule } from './docs/docs.module';
 import { PersonalizationModule } from './personalization/personalization.module';
 import { CacheModule } from './cache/cache.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -60,6 +62,8 @@ import { CacheModule } from './cache/cache.module';
     MailModule,
     DocsModule,
     PersonalizationModule,
+    ScheduleModule.forRoot(),
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

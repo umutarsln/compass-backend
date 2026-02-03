@@ -59,16 +59,12 @@ export class StoreService {
         // Cache key oluştur
         const cacheKey = `${this.CACHE_PREFIX}products:${JSON.stringify(query)}`;
 
-        console.log("CACHE KEY", cacheKey);
 
         // Cache'den kontrol et
         const cached = await this.cacheManager.get<StoreProductListResponseDto>(cacheKey);
-        console.log("CACHED", JSON.stringify(cached)?.substring(0, 100));
         if (cached) {
-            console.log("CACHED FOUND");
             return cached;
         }
-        console.log("CACHED NOT FOUND");
 
         // Kategori slug'larını ID'lere çevir ve tüm parent/child ID'lerini topla
         let allCategoryIds: string[] = [];
