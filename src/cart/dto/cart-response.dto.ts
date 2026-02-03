@@ -2,6 +2,26 @@ import { ApiProperty } from '@nestjs/swagger';
 import { CartStatus } from '../../common/enums/cart-status.enum';
 import { Currency } from '../../common/enums/currency.enum';
 
+export class AppliedCouponDto {
+    @ApiProperty()
+    id: string;
+
+    @ApiProperty()
+    code: string;
+
+    @ApiProperty()
+    name: string;
+
+    @ApiProperty()
+    type: string;
+
+    @ApiProperty()
+    discountValue: number;
+
+    @ApiProperty()
+    discountAmount: number;
+}
+
 export class CartItemResponseDto {
     @ApiProperty()
     id: string;
@@ -99,6 +119,18 @@ export class CartResponseDto {
 
     @ApiProperty({ type: [CartItemResponseDto] })
     items: CartItemResponseDto[];
+
+    @ApiProperty({ description: 'Ürünler toplamı (kargo ve kupon öncesi)' })
+    subtotal: number;
+
+    @ApiProperty({ description: 'Kupon indirimi tutarı' })
+    discountAmount: number;
+
+    @ApiProperty({ description: 'Genel toplam (subtotal - discountAmount)' })
+    total: number;
+
+    @ApiProperty({ nullable: true, type: () => AppliedCouponDto, description: 'Uygulanan kupon' })
+    appliedCoupon: AppliedCouponDto | null;
 
     @ApiProperty()
     createdAt: Date;

@@ -24,6 +24,7 @@ import { Upload } from '../upload/upload.entity';
 import { PaymentAttempt } from '../payment/payment-attempt.entity';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { PaymentProvider } from '../common/enums/payment-provider.enum';
+import { CouponService } from '../coupon/coupon.service';
 
 @Injectable()
 export class OrderService {
@@ -39,12 +40,13 @@ export class OrderService {
     @InjectRepository(PaymentAttempt)
     private paymentAttemptRepository: Repository<PaymentAttempt>,
     private cartService: CartService,
+    private couponService: CouponService,
     private dataSource: DataSource,
     private folderService: FolderService,
     private uploadService: UploadService,
     private userService: UserService,
     private s3Service: S3Service,
-  ) {}
+  ) { }
 
   /**
    * Generate unique 8-digit order number
@@ -59,7 +61,7 @@ export class OrderService {
       // Generate 8-digit number (00000000-99999999)
       const randomNum = Math.floor(Math.random() * 100000000);
       orderNo = randomNum.toString().padStart(8, '0');
-      
+
       // Check if it already exists
       exists = await this.orderRepository.exists({ where: { orderNo } });
       attempts++;
@@ -103,15 +105,29 @@ export class OrderService {
       }
     }
 
-    // Calculate totals
-    const subtotal = cart.items.reduce((sum, item) => {
-      const price = item.discountedPrice || item.basePrice;
-      return sum + Number(price) * item.quantity;
-    }, 0);
+    // Calculate subtotal
+    const subtotal = Math.round(
+      cart.items.reduce((sum, item) => {
+        const price = item.discountedPrice || item.basePrice;
+        return sum + Number(price) * item.quantity;
+      }, 0) * 100,
+    ) / 100;
+
+    // Validate and resolve coupon discount (backend always re-validates)
+    let discount = 0;
+    let orderCouponId: string | null = null;
+    if (cart.couponId && cart.coupon) {
+      try {
+        const result = await this.couponService.validateForCart(cart.coupon.code, subtotal);
+        discount = result.discountAmount;
+        orderCouponId = result.coupon.id;
+      } catch {
+        throw new BadRequestException('Kupon artık geçerli değil. Lütfen kuponu kaldırıp tekrar deneyin.');
+      }
+    }
 
     const shippingCost = createOrderDto.shippingCost || 0;
-    const discount = createOrderDto.discount || 0;
-    const total = subtotal + shippingCost - discount;
+    const total = Math.round((subtotal + shippingCost - discount) * 100) / 100;
 
     if (total <= 0) {
       throw new BadRequestException('Order total must be greater than 0');
@@ -132,6 +148,7 @@ export class OrderService {
         orderNo,
         userId: userId || null,
         cartId: cart.id,
+        couponId: orderCouponId,
         guestEmail: createOrderDto.guestEmail || null,
         guestPhone: createOrderDto.guestPhone || null,
         guestFirstName: createOrderDto.guestFirstName || null,
@@ -579,7 +596,7 @@ export class OrderService {
       try {
         const upload = await this.uploadService.findOne(fileId);
         const oldS3Key = upload.s3Key;
-        
+
         // Extract filename from old S3 key
         const filename = oldS3Key.split('/').pop() || upload.filename;
         const newS3Key = `${orderFolder.s3Prefix}${filename}`;

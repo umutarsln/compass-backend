@@ -11,11 +11,13 @@ import { UploadModule } from '../upload/upload.module';
 import { UserModule } from '../user/user.module';
 import { Upload } from '../upload/upload.entity';
 import { PaymentAttempt } from '../payment/payment-attempt.entity';
+import { CouponModule } from '../coupon/coupon.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Order, OrderItem, Cart, Upload, PaymentAttempt]),
     CartModule,
+    CouponModule,
     FolderModule,
     UploadModule,
     UserModule,
@@ -24,4 +26,4 @@ import { PaymentAttempt } from '../payment/payment-attempt.entity';
   providers: [OrderService],
   exports: [OrderService],
 })
-export class OrderModule {}
+export class OrderModule { }

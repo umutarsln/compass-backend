@@ -13,6 +13,7 @@ import { Currency } from '../common/enums/currency.enum';
 import { User } from '../user/user.entity';
 import { OrderItem } from './order-item.entity';
 import { Cart } from '../cart/cart.entity';
+import { Coupon } from '../coupon/coupon.entity';
 
 @Entity('orders')
 export class Order {
@@ -35,6 +36,13 @@ export class Order {
   @ManyToOne(() => Cart, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'cartId' })
   cart: Cart | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  couponId: string | null;
+
+  @ManyToOne(() => Coupon, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'couponId' })
+  coupon: Coupon | null;
 
   // Guest checkout için bilgiler
   @Column({ type: 'varchar', nullable: true })

@@ -16,9 +16,10 @@ import {
   ApiParam,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { CartService } from './cart.service';
+import { CartService, CartTotals } from './cart.service';
 import { AddItemDto } from './dto/add-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
+import { ApplyCouponDto } from '../coupon/dto/apply-coupon.dto';
 import { CartResponseDto } from './dto/cart-response.dto';
 import { GuestCartGuard } from './guards/guest-cart.guard';
 import { UserCartGuard } from './guards/user-cart.guard';
@@ -28,7 +29,7 @@ import { Public } from '../common/decorators/public.decorator';
 @ApiTags('Cart')
 @Controller('carts')
 export class CartController {
-  constructor(private readonly cartService: CartService) {}
+  constructor(private readonly cartService: CartService) { }
 
   @Post('guest')
   @Public()
@@ -40,7 +41,13 @@ export class CartController {
   })
   async createGuestCart(): Promise<CartResponseDto> {
     const cart = await this.cartService.createGuestCart();
-    return this.mapToResponseDto(cart);
+    const totals: CartTotals = {
+      subtotal: 0,
+      discountAmount: 0,
+      total: 0,
+      appliedCoupon: null,
+    };
+    return this.mapToResponseDto(cart, totals);
   }
 
   @Get(':id')
@@ -53,9 +60,11 @@ export class CartController {
     description: 'Cart retrieved',
     type: CartResponseDto,
   })
-  async getCart(@Param('id') id: string): Promise<CartResponseDto> {
-    const cart = await this.cartService.getCart(id, null);
-    return this.mapToResponseDto(cart);
+  async getCart(@Param('id') id: string, @Request() req: any): Promise<CartResponseDto> {
+    const userId = req.user?.id ?? null;
+    const cart = await this.cartService.getCart(id, userId);
+    const totals = await this.cartService.getCartTotals(cart);
+    return this.mapToResponseDto(cart, totals);
   }
 
   @Post(':id/items')
@@ -74,7 +83,7 @@ export class CartController {
   ): Promise<CartResponseDto> {
     const userId = req.user?.id || null;
     const guestId = req.headers['x-guest-id'] || null;
-    
+
     await this.cartService.addItem(
       cartId,
       addItemDto.productId,
@@ -85,7 +94,8 @@ export class CartController {
       guestId,
     );
     const cart = await this.cartService.getCart(cartId, userId);
-    return this.mapToResponseDto(cart);
+    const totals = await this.cartService.getCartTotals(cart);
+    return this.mapToResponseDto(cart, totals);
   }
 
   @Patch(':id/items/:itemId')
@@ -106,7 +116,7 @@ export class CartController {
   ): Promise<CartResponseDto> {
     const userId = req.user?.id || null;
     const guestId = req.headers['x-guest-id'] || null;
-    
+
     await this.cartService.updateItem(
       cartId,
       itemId,
@@ -116,7 +126,8 @@ export class CartController {
       guestId,
     );
     const cart = await this.cartService.getCart(cartId, userId);
-    return this.mapToResponseDto(cart);
+    const totals = await this.cartService.getCartTotals(cart);
+    return this.mapToResponseDto(cart, totals);
   }
 
   @Delete(':id/items/:itemId')
@@ -132,10 +143,13 @@ export class CartController {
   async removeItem(
     @Param('id') cartId: string,
     @Param('itemId') itemId: string,
+    @Request() req: any,
   ): Promise<CartResponseDto> {
-    await this.cartService.removeItem(cartId, itemId, null);
-    const cart = await this.cartService.getCart(cartId, null);
-    return this.mapToResponseDto(cart);
+    const userId = req.user?.id ?? null;
+    await this.cartService.removeItem(cartId, itemId, userId);
+    const cart = await this.cartService.getCart(cartId, userId);
+    const totals = await this.cartService.getCartTotals(cart);
+    return this.mapToResponseDto(cart, totals);
   }
 
   @Post(':id/merge')
@@ -154,7 +168,41 @@ export class CartController {
   ): Promise<CartResponseDto> {
     const userId = req.user.id;
     const cart = await this.cartService.mergeCart(guestCartId, userId);
-    return this.mapToResponseDto(cart);
+    const totals = await this.cartService.getCartTotals(cart);
+    return this.mapToResponseDto(cart, totals);
+  }
+
+  @Post(':id/coupon')
+  @UseGuards(GuestCartGuard)
+  @Public()
+  @ApiOperation({ summary: 'Apply coupon to cart' })
+  @ApiParam({ name: 'id', description: 'Cart ID' })
+  @ApiResponse({ status: 200, description: 'Coupon applied', type: CartResponseDto })
+  async applyCoupon(
+    @Param('id') cartId: string,
+    @Body() body: ApplyCouponDto,
+    @Request() req: any,
+  ): Promise<CartResponseDto> {
+    const userId = req.user?.id ?? null;
+    const cart = await this.cartService.applyCoupon(cartId, body.code, userId);
+    const totals = await this.cartService.getCartTotals(cart);
+    return this.mapToResponseDto(cart, totals);
+  }
+
+  @Delete(':id/coupon')
+  @UseGuards(GuestCartGuard)
+  @Public()
+  @ApiOperation({ summary: 'Remove coupon from cart' })
+  @ApiParam({ name: 'id', description: 'Cart ID' })
+  @ApiResponse({ status: 200, description: 'Coupon removed', type: CartResponseDto })
+  async removeCoupon(
+    @Param('id') cartId: string,
+    @Request() req: any,
+  ): Promise<CartResponseDto> {
+    const userId = req.user?.id ?? null;
+    const cart = await this.cartService.removeCoupon(cartId, userId);
+    const totals = await this.cartService.getCartTotals(cart);
+    return this.mapToResponseDto(cart, totals);
   }
 
   @Get('me/cart')
@@ -172,10 +220,11 @@ export class CartController {
     if (!cart) {
       return null;
     }
-    return this.mapToResponseDto(cart);
+    const totals = await this.cartService.getCartTotals(cart);
+    return this.mapToResponseDto(cart, totals);
   }
 
-  private mapToResponseDto(cart: any): CartResponseDto {
+  private mapToResponseDto(cart: any, totals: CartTotals): CartResponseDto {
     return {
       id: cart.id,
       userId: cart.userId,
@@ -183,7 +232,7 @@ export class CartController {
       items: cart.items?.map((item: any) => {
         // Get product gallery (first gallery for product)
         const productGallery = item.product?.galleries?.[0];
-        
+
         // Get variant gallery (first gallery for variant) or use product gallery
         const variantGallery = item.variant?.galleries?.[0] || productGallery;
 
@@ -252,6 +301,10 @@ export class CartController {
           updatedAt: item.updatedAt,
         };
       }) || [],
+      subtotal: totals.subtotal,
+      discountAmount: totals.discountAmount,
+      total: totals.total,
+      appliedCoupon: totals.appliedCoupon,
       createdAt: cart.createdAt,
       updatedAt: cart.updatedAt,
     };

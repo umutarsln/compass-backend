@@ -16,6 +16,22 @@ import { ProductType } from '../common/enums/product-type.enum';
 import { CartPersonalizationValidatorService } from '../personalization/cart-personalization-validator.service';
 import { CartPersonalizationPricingService } from '../personalization/cart-personalization-pricing.service';
 import { PersonalizationSnapshotService } from '../personalization/personalization-snapshot.service';
+import { CouponService } from '../coupon/coupon.service';
+import { Coupon } from '../coupon/coupon.entity';
+
+export interface CartTotals {
+    subtotal: number;
+    discountAmount: number;
+    total: number;
+    appliedCoupon: {
+        id: string;
+        code: string;
+        name: string;
+        type: string;
+        discountValue: number;
+        discountAmount: number;
+    } | null;
+}
 
 @Injectable()
 export class CartService {
@@ -32,6 +48,7 @@ export class CartService {
         private personalizationValidator: CartPersonalizationValidatorService,
         private personalizationPricing: CartPersonalizationPricingService,
         private personalizationSnapshot: PersonalizationSnapshotService,
+        private couponService: CouponService,
     ) { }
 
     /**
@@ -114,6 +131,7 @@ export class CartService {
                 'items.variant.galleries.thumbnailImage',
                 'items.variant.variantValues',
                 'items.variant.variantValues.variantOption',
+                'coupon',
             ],
         });
 
@@ -156,8 +174,95 @@ export class CartService {
                 'items.variant.galleries.thumbnailImage',
                 'items.variant.variantValues',
                 'items.variant.variantValues.variantOption',
+                'coupon',
             ],
         });
+    }
+
+    /**
+     * Calculate subtotal from cart items
+     */
+    getCartSubtotal(cart: Cart): number {
+        if (!cart.items || cart.items.length === 0) {
+            return 0;
+        }
+        return cart.items.reduce((sum, item) => {
+            const price = item.discountedPrice ?? item.basePrice;
+            return sum + Number(price) * item.quantity;
+        }, 0);
+    }
+
+    /**
+     * Get cart totals (subtotal, discountAmount, total, appliedCoupon).
+     * If coupon is applied but no longer valid, clears it and returns 0 discount.
+     */
+    async getCartTotals(cart: Cart): Promise<CartTotals> {
+        const subtotal = Math.round(this.getCartSubtotal(cart) * 100) / 100;
+
+        if (!cart.couponId || !cart.coupon) {
+            return {
+                subtotal,
+                discountAmount: 0,
+                total: subtotal,
+                appliedCoupon: null,
+            };
+        }
+
+        try {
+            const { coupon, discountAmount } = await this.couponService.validateForCart(
+                cart.coupon.code,
+                subtotal,
+            );
+            const total = Math.round((subtotal - discountAmount) * 100) / 100;
+            return {
+                subtotal,
+                discountAmount,
+                total,
+                appliedCoupon: {
+                    id: coupon.id,
+                    code: coupon.code,
+                    name: coupon.name,
+                    type: coupon.type,
+                    discountValue: Number(coupon.discountValue),
+                    discountAmount,
+                },
+            };
+        } catch {
+            // Coupon no longer valid - clear it from cart
+            cart.couponId = null;
+            cart.coupon = null;
+            await this.cartRepository.save(cart);
+            return {
+                subtotal,
+                discountAmount: 0,
+                total: subtotal,
+                appliedCoupon: null,
+            };
+        }
+    }
+
+    /**
+     * Apply coupon to cart
+     */
+    async applyCoupon(cartId: string, code: string, userId?: string | null): Promise<Cart> {
+        const cart = await this.getCart(cartId, userId);
+        const subtotal = this.getCartSubtotal(cart);
+        const { coupon } = await this.couponService.validateForCart(code, subtotal);
+        cart.couponId = coupon.id;
+        cart.coupon = coupon as Coupon;
+        await this.cartRepository.save(cart);
+        return this.getCart(cartId, userId);
+    }
+
+    /**
+     * Remove coupon from cart
+     */
+    async removeCoupon(cartId: string, userId?: string | null): Promise<Cart> {
+        const cart = await this.getCart(cartId, userId);
+        cart.couponId = null;
+        cart.coupon = null;
+        await this.cartRepository.save(cart);
+        return this.getCart(cartId, userId);
     }
 
     /**
@@ -244,9 +349,9 @@ export class CartService {
         // For personalized items, we need to check both productId/variantId AND personalization
         // If personalization exists, treat as separate item even if productId/variantId match
         const hasPersonalization = personalizationSnapshot !== null && personalizationSnapshot !== undefined;
-        
+
         let existingItem: CartItem | null = null;
-        
+
         if (hasPersonalization) {
             // For personalized items, find item with same productId, variantId AND personalization
             // We need to check all items and compare personalization JSON
@@ -257,7 +362,7 @@ export class CartService {
                     variantId: variantId ? variantId : IsNull(),
                 },
             });
-            
+
             // Find item with matching personalization (deep comparison)
             existingItem = allItems.find((item) => {
                 if (!item.personalization) return false;
@@ -275,9 +380,9 @@ export class CartService {
                     variantId: variantId ? variantId : IsNull(),
                 },
             });
-            
+
             // Find item without personalization
-            existingItem = allItems.find((item) => 
+            existingItem = allItems.find((item) =>
                 !item.personalization || item.personalization === null
             ) || null;
         }
@@ -425,6 +530,7 @@ export class CartService {
                     'items.variant.galleries.thumbnailImage',
                     'items.variant.variantValues',
                     'items.variant.variantValues.variantOption',
+                    'coupon',
                 ],
             });
 
@@ -447,6 +553,7 @@ export class CartService {
                     'items.variant.galleries.thumbnailImage',
                     'items.variant.variantValues',
                     'items.variant.variantValues.variantOption',
+                    'coupon',
                 ],
             });
 
@@ -463,9 +570,9 @@ export class CartService {
                 // For personalized items, we need to check both productId/variantId AND personalization
                 // If personalization exists, treat as separate item even if productId/variantId match
                 const hasPersonalization = guestItem.personalization !== null && guestItem.personalization !== undefined;
-                
+
                 let existingItem: CartItem | undefined;
-                
+
                 if (hasPersonalization) {
                     // For personalized items, check if exact same personalization exists
                     existingItem = userCart.items.find(
@@ -511,6 +618,28 @@ export class CartService {
                 }
             }
 
+            // Guest sepetinde kupon varsa, birleşen sepete uygula (geçerliyse)
+            if (guestCart.couponId && guestCart.coupon) {
+                const mergedUserCart = await manager.findOne(Cart, {
+                    where: { id: userCart.id },
+                    relations: [
+                        'items',
+                        'coupon',
+                    ],
+                });
+                if (mergedUserCart) {
+                    const mergedSubtotal = this.getCartSubtotal(mergedUserCart);
+                    try {
+                        await this.couponService.validateForCart(guestCart.coupon.code, mergedSubtotal);
+                        mergedUserCart.couponId = guestCart.couponId;
+                        mergedUserCart.coupon = guestCart.coupon as Coupon;
+                        await manager.save(Cart, mergedUserCart);
+                    } catch {
+                        // Kupon birleşen sepet için geçersizse uygulama (sessizce atla)
+                    }
+                }
+            }
+
             // Mark guest cart as merged
             guestCart.status = CartStatus.MERGED;
             await manager.save(Cart, guestCart);
@@ -530,6 +659,7 @@ export class CartService {
                     'items.variant.galleries.thumbnailImage',
                     'items.variant.variantValues',
                     'items.variant.variantValues.variantOption',
+                    'coupon',
                 ],
             });
 

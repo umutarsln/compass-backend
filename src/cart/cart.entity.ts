@@ -11,6 +11,7 @@ import {
 import { CartStatus } from '../common/enums/cart-status.enum';
 import { User } from '../user/user.entity';
 import { CartItem } from './cart-item.entity';
+import { Coupon } from '../coupon/coupon.entity';
 
 @Entity('carts')
 export class Cart {
@@ -23,6 +24,13 @@ export class Cart {
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'userId' })
   user: User | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  couponId: string | null;
+
+  @ManyToOne(() => Coupon, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'couponId' })
+  coupon: Coupon | null;
 
   @Column({
     type: 'enum',

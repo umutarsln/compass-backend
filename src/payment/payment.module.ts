@@ -11,6 +11,7 @@ import { IbanEftProvider } from './providers/iban-eft/iban-eft.provider';
 import { OrderModule } from '../order/order.module';
 import { Order } from '../order/order.entity';
 import { CartModule } from '../cart/cart.module';
+import { CouponModule } from '../coupon/coupon.module';
 import { MailModule } from '../mail/mail.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { MailModule } from '../mail/mail.module';
         TypeOrmModule.forFeature([PaymentAttempt, PaymentSettings, Order]),
         OrderModule,
         CartModule,
+        CouponModule,
         MailModule,
     ],
     controllers: [PaymentController, PaymentSettingsController],

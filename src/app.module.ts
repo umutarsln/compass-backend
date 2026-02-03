@@ -13,6 +13,7 @@ import { StockModule } from './stock/stock.module';
 import { ProductModule } from './product/product.module';
 import { StoreModule } from './store/store.module';
 import { CartModule } from './cart/cart.module';
+import { CouponModule } from './coupon/coupon.module';
 import { FavoriteModule } from './favorite/favorite.module';
 import { OrderModule } from './order/order.module';
 import { PaymentModule } from './payment/payment.module';
@@ -52,6 +53,7 @@ import { CacheModule } from './cache/cache.module';
     ProductModule,
     StoreModule,
     CartModule,
+    CouponModule,
     FavoriteModule,
     OrderModule,
     PaymentModule,

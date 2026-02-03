@@ -71,6 +71,25 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'PATCH /tags/:id': [Role.ADMIN], // Tag güncelle
     'DELETE /tags/:id': [Role.ADMIN], // Tag sil
 
+    // Coupon Endpoints (Admin)
+    'POST /coupons': [Role.ADMIN], // Kupon oluştur
+    'GET /coupons': [Role.ADMIN], // Kupon listesi
+    'GET /coupons/:id': [Role.ADMIN], // Kupon detayı
+    'PATCH /coupons/:id': [Role.ADMIN], // Kupon güncelle
+    'DELETE /coupons/:id': [Role.ADMIN], // Kupon sil
+
+    // Cart Endpoints (Public with cart guard)
+    'POST /carts/guest': [], // Guest sepet oluştur
+    'GET /carts/:id': [], // Sepet getir
+    'POST /carts/:id/items': [], // Sepete ürün ekle
+    'PATCH /carts/:id/items/:itemId': [], // Sepet ürünü güncelle
+    'DELETE /carts/:id/items/:itemId': [], // Sepetten ürün sil
+    'DELETE /carts/:id/items': [], // Sepeti temizle
+    'POST /carts/:id/coupon': [], // Sepete kupon uygula
+    'DELETE /carts/:id/coupon': [], // Sepetten kupon kaldır
+    'POST /carts/:id/merge': [Role.USER, Role.ADMIN], // Guest sepeti user sepetine birleştir
+    'GET /carts/me/cart': [Role.USER, Role.ADMIN], // Kullanıcı sepeti getir
+
     // Product Endpoints
     'POST /products': [Role.ADMIN], // Ürün oluştur
     'GET /products': [], // Public - herkes ürünleri görebilir

@@ -84,6 +84,45 @@ Cart modülü, sepet işlemlerini yönetir. Hem authenticated kullanıcılar hem
 
 ---
 
+### 7. Sepete Kupon Uygula
+
+**POST** `/carts/:id/coupon`
+
+**Authentication**: Public (guest cart guard ile)
+
+**Request Body**: `ApplyCouponDto`
+
+```json
+{
+  "code": "HOSGELDIN20"
+}
+```
+
+**Response (200 OK)**: `CartResponseDto` (subtotal, discountAmount, total, appliedCoupon dahil)
+
+---
+
+### 8. Sepetten Kupon Kaldır
+
+**DELETE** `/carts/:id/coupon`
+
+**Authentication**: Public (guest cart guard ile)
+
+**Response (200 OK)**: `CartResponseDto`
+
+---
+
+## Sepet Cevabı (CartResponseDto)
+
+Sepet cevabında aşağıdaki toplam alanları döner:
+
+- **subtotal**: Ürünler toplamı (kargo ve kupon öncesi)
+- **discountAmount**: Kupon indirimi tutarı
+- **total**: Genel toplam (subtotal - discountAmount)
+- **appliedCoupon**: Uygulanan kupon bilgisi (id, code, name, type, discountValue, discountAmount) veya null
+
+---
+
 ## Önemli Notlar
 
 1. **Guest Cart**: Guest kullanıcılar için cart ID localStorage'da saklanır.
@@ -91,3 +130,4 @@ Cart modülü, sepet işlemlerini yönetir. Hem authenticated kullanıcılar hem
 3. **Cart Status**: Cart'lar `ACTIVE` veya `ORDERED` durumunda olabilir.
 4. **Stok Kontrolü**: Sepete ekleme sırasında stok kontrolü yapılır.
 5. **Varyasyonlu Ürünler**: Varyasyonlu ürünler için `variantCombinationId` zorunludur.
+6. **Kupon**: Her sepette en fazla bir kupon uygulanabilir. Kupon detayları için Coupon modülü dokümantasyonuna bakın.

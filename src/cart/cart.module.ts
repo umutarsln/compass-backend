@@ -9,6 +9,7 @@ import { CartController } from './cart.controller';
 import { GuestCartGuard } from './guards/guest-cart.guard';
 import { UserCartGuard } from './guards/user-cart.guard';
 import { PersonalizationModule } from '../personalization/personalization.module';
+import { CouponModule } from '../coupon/coupon.module';
 
 @Module({
   imports: [
@@ -19,9 +20,10 @@ import { PersonalizationModule } from '../personalization/personalization.module
       VariantCombination,
     ]),
     PersonalizationModule,
+    CouponModule,
   ],
   controllers: [CartController],
   providers: [CartService, GuestCartGuard, UserCartGuard],
   exports: [CartService],
 })
-export class CartModule {}
+export class CartModule { }

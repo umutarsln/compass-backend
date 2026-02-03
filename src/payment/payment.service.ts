@@ -20,6 +20,7 @@ import { IyzicoProvider } from './providers/iyzico/iyzico.provider';
 import { IbanEftProvider } from './providers/iban-eft/iban-eft.provider';
 import { PaymentSettingsService } from './payment-settings.service';
 import { CartService } from '../cart/cart.service';
+import { CouponService } from '../coupon/coupon.service';
 import { MailService, OrderItemWithImage } from '../mail/mail.service';
 import * as crypto from 'crypto';
 
@@ -35,6 +36,7 @@ export class PaymentService {
         private orderRepository: Repository<Order>,
         private orderService: OrderService,
         private cartService: CartService,
+        private couponService: CouponService,
         private mailService: MailService,
         private configService: ConfigService,
         private paymentSettingsService: PaymentSettingsService,
@@ -46,7 +48,7 @@ export class PaymentService {
         this.providers.set(PaymentProvider.IYZICO, iyzicoProvider);
         this.providers.set(PaymentProvider.IBAN_EFT, ibanEftProvider);
         this.logger.log('PaymentService initialized with providers: IYZICO, IBAN_EFT');
-        
+
         // Initialize providers with settings
         this.initializeProviders();
     }
@@ -57,17 +59,17 @@ export class PaymentService {
     private async initializeProviders(): Promise<void> {
         try {
             const settings = await this.paymentSettingsService.getSettings();
-            
+
             // Iyzico provider'a settings'i set et
             if (this.iyzicoProvider && typeof (this.iyzicoProvider as any).setSettings === 'function') {
                 (this.iyzicoProvider as any).setSettings(settings);
             }
-            
+
             // IBAN EFT provider'a settings'i set et
             if (this.ibanEftProvider && typeof (this.ibanEftProvider as any).setSettings === 'function') {
                 (this.ibanEftProvider as any).setSettings(settings);
             }
-            
+
             this.logger.log('[initializeProviders] Providers initialized with settings');
         } catch (error: any) {
             this.logger.warn('[initializeProviders] Failed to initialize providers with settings:', error.message);
@@ -154,7 +156,7 @@ export class PaymentService {
 
             // Provider için settings'i güncelle
             const settings = await this.paymentSettingsService.getSettings();
-            
+
             if (provider === PaymentProvider.IYZICO) {
                 if (this.iyzicoProvider && typeof (this.iyzicoProvider as any).setSettings === 'function') {
                     (this.iyzicoProvider as any).setSettings(settings);
@@ -264,11 +266,22 @@ export class PaymentService {
 
             this.logger.debug(`[createCheckout] Total amount calculated: ${totalAmount} ${orderEntity.currency}`);
 
-            // Prepare basket items
+            // Order totals (for basketItems to match Iyzico requirement: sum(basketItems) === price)
+            const orderSubtotal = typeof orderEntity.subtotal === 'string'
+                ? parseFloat(orderEntity.subtotal)
+                : Number(orderEntity.subtotal);
+            const orderShipping = typeof orderEntity.shippingCost === 'string'
+                ? parseFloat(orderEntity.shippingCost)
+                : Number(orderEntity.shippingCost);
+            const orderDiscount = typeof orderEntity.discount === 'string'
+                ? parseFloat(orderEntity.discount)
+                : Number(orderEntity.discount);
+
+            // Prepare basket items (product items first). Type allows PHYSICAL and VIRTUAL for shipping/discount.
+            type BasketItem = { id: string; name: string; category1: string; category2?: string; itemType: 'PHYSICAL' | 'VIRTUAL'; price: number };
             this.logger.debug(`[createCheckout] Preparing ${orderEntity.items.length} basket items...`);
-            const basketItems = orderEntity.items.map((item, index) => {
+            const basketItems: BasketItem[] = orderEntity.items.map((item, index) => {
                 // Iyzico requires basketItems[].price to be the total price for that item
-                // Use item.totalPrice which is already calculated (unitPrice * quantity or discountedPrice * quantity)
                 const itemTotalPrice = typeof item.totalPrice === 'string'
                     ? parseFloat(item.totalPrice)
                     : Number(item.totalPrice);
@@ -278,16 +291,10 @@ export class PaymentService {
                     throw new BadRequestException(`Invalid total price for item ${item.productName}`);
                 }
 
-                // Get category information from product
                 const product = item.product;
                 const categories = product?.categories || [];
-                // Use first category as category1, or 'Product' as fallback
                 const category1 = categories[0]?.name || 'Product';
-                // Use second category, or first category's parent, or undefined
                 const category2 = categories[1]?.name || categories[0]?.parent?.name || undefined;
-
-                // Use orderItem.id as basket item ID (Iyzico accepts UUID)
-                // Iyzico example uses short IDs like "BI101", but UUID should work too
                 const basketItemId = item.id;
 
                 this.logger.debug(`[createCheckout] Basket item ${index + 1}: ${item.productName}, quantity: ${item.quantity}, totalPrice: ${itemTotalPrice}, category1: ${category1}, category2: ${category2 || 'N/A'}`);
@@ -298,23 +305,41 @@ export class PaymentService {
                     category1: category1,
                     ...(category2 && { category2: category2 }),
                     itemType: 'PHYSICAL' as const,
-                    price: itemTotalPrice, // Total price for this item (already includes quantity)
+                    price: itemTotalPrice,
                 };
             });
 
+            // Add shipping as basket item so sum(basketItems) === order.total
+            if (orderShipping > 0) {
+                basketItems.push({
+                    id: `shipping-${orderEntity.id}`,
+                    name: 'Kargo',
+                    category1: 'Shipping',
+                    itemType: 'VIRTUAL' as const,
+                    price: Math.round(orderShipping * 100) / 100,
+                });
+            }
+            // Add discount as negative basket item (İndirim) so total matches
+            if (orderDiscount > 0) {
+                basketItems.push({
+                    id: `discount-${orderEntity.id}`,
+                    name: 'İndirim',
+                    category1: 'Discount',
+                    itemType: 'VIRTUAL' as const,
+                    price: Math.round(-orderDiscount * 100) / 100,
+                });
+            }
+
             // Validate that basketItems total equals order total
-            // Iyzico requires: sum(basketItems[].price) == price == paidPrice
-            const basketItemsTotal = basketItems.reduce((sum, item) => sum + item.price, 0);
-            this.logger.debug(`[createCheckout] Basket items total: ${basketItemsTotal}, Order total: ${totalAmount}`);
-            
-            // Allow small rounding differences (0.01 tolerance) due to floating point precision
+            const basketItemsTotal = Math.round(basketItems.reduce((sum, item) => sum + item.price, 0) * 100) / 100;
+            this.logger.debug(`[createCheckout] Basket items total: ${basketItemsTotal}, Order total: ${totalAmount} (subtotal: ${orderSubtotal}, shipping: ${orderShipping}, discount: ${orderDiscount})`);
+
             const difference = Math.abs(basketItemsTotal - totalAmount);
             if (difference > 0.01) {
                 this.logger.error(`[createCheckout] Basket items total (${basketItemsTotal}) does not match order total (${totalAmount}), difference: ${difference}`);
                 throw new BadRequestException(`Basket items total (${basketItemsTotal.toFixed(2)}) does not match order total (${totalAmount.toFixed(2)}). Difference: ${difference.toFixed(2)}`);
             } else if (difference > 0) {
-                this.logger.warn(`[createCheckout] Small rounding difference detected: ${difference.toFixed(4)}. Adjusting order total to match basket items total.`);
-                // Adjust totalAmount to match basketItemsTotal to avoid Iyzico error
+                this.logger.warn(`[createCheckout] Small rounding difference: ${difference.toFixed(4)}. Adjusting total to match basket.`);
                 totalAmount = basketItemsTotal;
             }
 
@@ -467,6 +492,17 @@ export class PaymentService {
                     attempt.id,
                 );
                 this.logger.log(`[handleCallback] Order ${attempt.orderId} marked as paid successfully`);
+
+                // Increment coupon usage count if order used a coupon
+                if (order.couponId) {
+                    try {
+                        await this.couponService.incrementUsage(order.couponId);
+                        this.logger.log(`[handleCallback] Coupon ${order.couponId} usage incremented`);
+                    } catch (error) {
+                        this.logger.error(`[handleCallback] Failed to increment coupon usage: ${error.message}`, error.stack);
+                        // Don't throw, just log
+                    }
+                }
 
                 // Clear cart after successful payment
                 if (order.cartId) {
@@ -674,19 +710,19 @@ export class PaymentService {
         whatsappNumber: string | null;
     } | null> {
         this.logger.log('[getIbanInfo] Getting IBAN EFT information');
-        
+
         try {
             // Settings'i güncelle
             const settings = await this.paymentSettingsService.getSettings();
             if (this.ibanEftProvider && typeof (this.ibanEftProvider as any).setSettings === 'function') {
                 (this.ibanEftProvider as any).setSettings(settings);
             }
-            
+
             // IBAN bilgilerini al
             if (this.ibanEftProvider && typeof (this.ibanEftProvider as any).getIbanInfo === 'function') {
                 return (this.ibanEftProvider as any).getIbanInfo();
             }
-            
+
             return null;
         } catch (error: any) {
             this.logger.error(`[getIbanInfo] Error getting IBAN info: ${error.message}`);
