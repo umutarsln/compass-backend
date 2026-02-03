@@ -233,6 +233,8 @@ export class OrderService {
       'items.variant.galleries',
       'items.variant.galleries.mainImage',
       'items.variant.galleries.thumbnailImage',
+      'items.variant.variantValues',
+      'items.variant.variantValues.variantOption',
     ];
     if (includeUser) {
       relations.push('user');
@@ -278,6 +280,8 @@ export class OrderService {
         'items.variant.galleries',
         'items.variant.galleries.mainImage',
         'items.variant.galleries.thumbnailImage',
+        'items.variant.variantValues',
+        'items.variant.variantValues.variantOption',
       ],
     });
 
@@ -307,7 +311,13 @@ export class OrderService {
   async getUserOrders(userId: string): Promise<OrderResponseDto[]> {
     const orders = await this.orderRepository.find({
       where: { userId },
-      relations: ['items', 'items.product', 'items.variant'],
+      relations: [
+        'items',
+        'items.product',
+        'items.variant',
+        'items.variant.variantValues',
+        'items.variant.variantValues.variantOption',
+      ],
       order: { createdAt: 'DESC' },
     });
 
@@ -467,69 +477,135 @@ export class OrderService {
       billingAddress: order.billingAddress,
       notes: order.notes,
       paymentProvider,
-      items: order.items?.map((item) => {
-        const itemDto: any = {
-          id: item.id,
-          productId: item.productId,
-          variantId: item.variantId,
-          productName: item.productName,
-          quantity: item.quantity,
-          unitPrice: Number(item.unitPrice),
-          discountedPrice: item.discountedPrice ? Number(item.discountedPrice) : null,
-          totalPrice: Number(item.totalPrice),
-          currency: item.currency,
-          personalization: item.personalization || null, // Include personalization snapshot
-          createdAt: item.createdAt,
-        };
-
-        // Product bilgilerini ekle (slug ve gallery)
-        if (item.product) {
-          itemDto.product = {
-            id: item.product.id,
-            slug: item.product.slug,
-            galleries: item.product.galleries?.map((gallery) => ({
-              mainImage: gallery.mainImage ? {
-                id: gallery.mainImage.id,
-                s3Url: gallery.mainImage.s3Url,
-                filename: gallery.mainImage.filename,
-                displayName: gallery.mainImage.displayName,
-              } : null,
-              thumbnailImage: gallery.thumbnailImage ? {
-                id: gallery.thumbnailImage.id,
-                s3Url: gallery.thumbnailImage.s3Url,
-                filename: gallery.thumbnailImage.filename,
-                displayName: gallery.thumbnailImage.displayName,
-              } : null,
-            })) || [],
+      items: await Promise.all(
+        (order.items || []).map(async (item) => {
+          const itemDto: any = {
+            id: item.id,
+            productId: item.productId,
+            variantId: item.variantId,
+            productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: Number(item.unitPrice),
+            discountedPrice: item.discountedPrice ? Number(item.discountedPrice) : null,
+            totalPrice: Number(item.totalPrice),
+            currency: item.currency,
+            personalization: item.personalization
+              ? await this.enrichPersonalizationWithUrls(item.personalization)
+              : null,
+            createdAt: item.createdAt,
           };
-        }
 
-        // Variant bilgilerini ekle (gallery)
-        if (item.variant) {
-          itemDto.variant = {
-            id: item.variant.id,
-            galleries: item.variant.galleries?.map((gallery) => ({
-              mainImage: gallery.mainImage ? {
-                id: gallery.mainImage.id,
-                s3Url: gallery.mainImage.s3Url,
-                filename: gallery.mainImage.filename,
-                displayName: gallery.mainImage.displayName,
-              } : null,
-              thumbnailImage: gallery.thumbnailImage ? {
-                id: gallery.thumbnailImage.id,
-                s3Url: gallery.thumbnailImage.s3Url,
-                filename: gallery.thumbnailImage.filename,
-                displayName: gallery.thumbnailImage.displayName,
-              } : null,
-            })) || [],
-          };
-        }
+          // Product bilgilerini ekle (slug ve gallery)
+          if (item.product) {
+            itemDto.product = {
+              id: item.product.id,
+              slug: item.product.slug,
+              galleries: item.product.galleries?.map((gallery) => ({
+                mainImage: gallery.mainImage ? {
+                  id: gallery.mainImage.id,
+                  s3Url: gallery.mainImage.s3Url,
+                  filename: gallery.mainImage.filename,
+                  displayName: gallery.mainImage.displayName,
+                } : null,
+                thumbnailImage: gallery.thumbnailImage ? {
+                  id: gallery.thumbnailImage.id,
+                  s3Url: gallery.thumbnailImage.s3Url,
+                  filename: gallery.thumbnailImage.filename,
+                  displayName: gallery.thumbnailImage.displayName,
+                } : null,
+              })) || [],
+            };
+          }
 
-        return itemDto;
-      }) || [],
+          // Variant bilgilerini ekle (gallery + seçilen varyasyon değerleri)
+          if (item.variant) {
+            itemDto.variant = {
+              id: item.variant.id,
+              galleries: item.variant.galleries?.map((gallery) => ({
+                mainImage: gallery.mainImage ? {
+                  id: gallery.mainImage.id,
+                  s3Url: gallery.mainImage.s3Url,
+                  filename: gallery.mainImage.filename,
+                  displayName: gallery.mainImage.displayName,
+                } : null,
+                thumbnailImage: gallery.thumbnailImage ? {
+                  id: gallery.thumbnailImage.id,
+                  s3Url: gallery.thumbnailImage.s3Url,
+                  filename: gallery.thumbnailImage.filename,
+                  displayName: gallery.thumbnailImage.displayName,
+                } : null,
+              })) || [],
+              variantValues:
+                item.variant.variantValues?.map((vv) => ({
+                  id: vv.id,
+                  value: vv.value,
+                  colorCode: vv.colorCode ?? null,
+                  variantOption: vv.variantOption
+                    ? {
+                      id: vv.variantOption.id,
+                      name: vv.variantOption.name,
+                      type: vv.variantOption.type,
+                    }
+                    : null,
+                })) || [],
+            };
+          }
+
+          return itemDto;
+        }),
+      ),
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
     };
+  }
+
+  private static readonly UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  /**
+   * Kişiselleştirme snapshot'taki dosya ID'lerini S3 URL'leriyle zenginleştirir (sipariş detayında fotoğraf göstermek için).
+   */
+  private async enrichPersonalizationWithUrls(personalization: any): Promise<any> {
+    if (!personalization) return personalization;
+    // TypeORM jsonb bazen string dönebiliyor
+    const parsed =
+      typeof personalization === 'string'
+        ? (() => {
+          try {
+            return JSON.parse(personalization) as any;
+          } catch {
+            return personalization;
+          }
+        })()
+        : personalization;
+    if (!parsed.userValues || typeof parsed.userValues !== 'object') return parsed;
+
+    const userValues = parsed.userValues as Record<string, unknown>;
+    const enrichedUserValues: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(userValues)) {
+      enrichedUserValues[key] = await this.resolvePersonalizationValue(value);
+    }
+
+    return { ...parsed, userValues: enrichedUserValues };
+  }
+
+  private async resolvePersonalizationValue(value: unknown): Promise<unknown> {
+    if (value == null) return value;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (OrderService.UUID_REGEX.test(trimmed)) {
+        const upload = await this.uploadRepository.findOne({ where: { id: trimmed } });
+        if (upload?.s3Url) {
+          return { id: trimmed, url: upload.s3Url };
+        }
+        this.logger.warn(`[enrichPersonalizationWithUrls] Upload not found for id: ${trimmed}`);
+      }
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return Promise.all(value.map((v) => this.resolvePersonalizationValue(v)));
+    }
+    return value;
   }
 
   /**

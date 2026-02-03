@@ -46,7 +46,7 @@ export class IyzicoProvider implements PaymentProvider {
      */
     setSettings(settings: any): void {
         this.settings = settings;
-        
+
         // Settings'ten Iyzico bilgilerini al
         const apiKey = settings.iyzicoApiKey || this.configService.get<string>('IYZICO_API_KEY');
         const secretKey = settings.iyzicoSecretKey || this.configService.get<string>('IYZICO_SECRET_KEY');
@@ -146,63 +146,63 @@ export class IyzicoProvider implements PaymentProvider {
             const priceString = amount.toFixed(2);
             this.logger.debug(`[initializeCheckout] Amount formatted: ${priceString} ${input.currency}`);
 
-        const request: IyzicoCheckoutFormInitializeRequest = {
-            locale: 'tr',
-            conversationId: input.conversationId,
-            price: priceString,
-            paidPrice: priceString,
-            currency: input.currency,
-            basketId: input.orderId,
-            paymentGroup: 'PRODUCT', // Iyzico example shows this field
-            callbackUrl: input.callbackUrl || this.callbackUrl,
-            enabledInstallments: ['2', '3', '6', '9', '12'], // Common installments for Turkey (as strings per Iyzico Python example)
-            buyer: {
-                // Iyzico requires buyerId, use provided id or generate UUID for guest
-                id: input.buyerInfo.id || crypto.randomUUID(),
-                name: input.buyerInfo.name,
-                surname: input.buyerInfo.surname,
-                gsmNumber: input.buyerInfo.phone,
-                email: input.buyerInfo.email,
-                // Iyzico requires identityNumber field, send default value if not provided
-                identityNumber: input.buyerInfo.identityNumber || '11111111111',
-                // Iyzico requires registrationAddress, use shippingAddress
-                registrationAddress: input.shippingAddress.address,
-                city: input.shippingAddress.city,
-                country: this.normalizeCountry(input.shippingAddress.country || 'TR'),
-                zipCode: input.shippingAddress.zipCode,
-            },
-            shippingAddress: {
-                contactName: input.shippingAddress.contactName,
-                city: input.shippingAddress.city,
-                country: this.normalizeCountry(input.shippingAddress.country || 'TR'),
-                address: input.shippingAddress.address,
-                zipCode: input.shippingAddress.zipCode,
-            },
-            billingAddress: {
-                contactName: input.billingAddress.contactName,
-                city: input.billingAddress.city,
-                country: this.normalizeCountry(input.billingAddress.country || 'TR'),
-                address: input.billingAddress.address,
-                zipCode: input.billingAddress.zipCode,
-            },
-            basketItems: input.basketItems.map((item) => {
-                // Ensure price is a number, then convert to string with 2 decimal places
-                const itemPrice = typeof item.price === 'string' ? parseFloat(item.price) : Number(item.price);
-                if (isNaN(itemPrice) || itemPrice <= 0) {
-                    throw new Error(`Invalid item price for ${item.name}: price must be a positive number`);
-                }
-                // Format price as string with 2 decimal places (matching Python SDK format)
-                const priceString = itemPrice.toFixed(2);
-                return {
-                    id: item.id,
-                    name: item.name,
-                    category1: item.category1 || 'Product',
-                    ...(item.category2 && { category2: item.category2 }),
-                    itemType: item.itemType,
-                    price: priceString, // Send as string, matching Python SDK format
-                };
-            }),
-        };
+            const request: IyzicoCheckoutFormInitializeRequest = {
+                locale: 'tr',
+                conversationId: input.conversationId,
+                price: priceString,
+                paidPrice: priceString,
+                currency: input.currency,
+                basketId: input.orderId,
+                paymentGroup: 'PRODUCT', // Iyzico example shows this field
+                callbackUrl: input.callbackUrl || this.callbackUrl,
+                enabledInstallments: ['2', '3', '6', '9', '12'], // Common installments for Turkey (as strings per Iyzico Python example)
+                buyer: {
+                    // Iyzico requires buyerId, use provided id or generate UUID for guest
+                    id: input.buyerInfo.id || crypto.randomUUID(),
+                    name: input.buyerInfo.name,
+                    surname: input.buyerInfo.surname,
+                    gsmNumber: input.buyerInfo.phone,
+                    email: input.buyerInfo.email,
+                    // Iyzico requires identityNumber field, send default value if not provided
+                    identityNumber: input.buyerInfo.identityNumber || '11111111111',
+                    // Iyzico requires registrationAddress, use shippingAddress
+                    registrationAddress: input.shippingAddress.address,
+                    city: input.shippingAddress.city,
+                    country: this.normalizeCountry(input.shippingAddress.country || 'TR'),
+                    zipCode: input.shippingAddress.zipCode,
+                },
+                shippingAddress: {
+                    contactName: input.shippingAddress.contactName,
+                    city: input.shippingAddress.city,
+                    country: this.normalizeCountry(input.shippingAddress.country || 'TR'),
+                    address: input.shippingAddress.address,
+                    zipCode: input.shippingAddress.zipCode,
+                },
+                billingAddress: {
+                    contactName: input.billingAddress.contactName,
+                    city: input.billingAddress.city,
+                    country: this.normalizeCountry(input.billingAddress.country || 'TR'),
+                    address: input.billingAddress.address,
+                    zipCode: input.billingAddress.zipCode,
+                },
+                basketItems: input.basketItems.map((item) => {
+                    // Ensure price is a number, then convert to string with 2 decimal places
+                    const itemPrice = typeof item.price === 'string' ? parseFloat(item.price) : Number(item.price);
+                    if (isNaN(itemPrice) || itemPrice <= 0) {
+                        throw new Error(`Invalid item price for ${item.name}: price must be a positive number`);
+                    }
+                    // Format price as string with 2 decimal places (matching Python SDK format)
+                    const priceString = itemPrice.toFixed(2);
+                    return {
+                        id: item.id,
+                        name: item.name,
+                        category1: item.category1 || 'Product',
+                        ...(item.category2 && { category2: item.category2 }),
+                        itemType: item.itemType,
+                        price: priceString, // Send as string, matching Python SDK format
+                    };
+                }),
+            };
 
             const basketSum = request.basketItems.reduce((s, i) => s + parseFloat(i.price), 0);
             this.logger.log(`[initializeCheckout] Iyzico'ya giden istek - price/paidPrice: ${request.price} ${request.currency}, basketId: ${request.basketId}, basketItems toplamı: ${basketSum.toFixed(2)}, kalem sayısı: ${request.basketItems.length}`);
@@ -235,17 +235,17 @@ export class IyzicoProvider implements PaymentProvider {
 
     async retrieveCheckout(token: string, conversationId?: string): Promise<NormalizedPaymentResult> {
         this.logger.log(`[retrieveCheckout] Retrieving checkout status for token: ${token.substring(0, 20)}..., conversationId: ${conversationId || 'N/A'}`);
-        
+
         try {
             if (!conversationId) {
                 this.logger.warn(`[retrieveCheckout] conversationId not provided, using default`);
             }
-            
+
             this.logger.debug(`[retrieveCheckout] Calling Iyzico API retrieveCheckoutForm...`);
-            const response = await this.httpClient.retrieveCheckoutForm({ 
+            const response = await this.httpClient.retrieveCheckoutForm({
                 locale: 'tr',
                 conversationId: conversationId || '',
-                token 
+                token
             });
 
             this.logger.debug(`[retrieveCheckout] Iyzico response: ${JSON.stringify({ status: response.status, paymentStatus: response.paymentStatus, paymentId: response.paymentId, errorCode: response.errorCode, errorMessage: response.errorMessage })}`);

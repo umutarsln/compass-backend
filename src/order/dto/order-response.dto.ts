@@ -48,6 +48,12 @@ export class OrderItemResponseDto {
         displayName: string | null;
       } | null;
     }>;
+    variantValues?: Array<{
+      id: string;
+      value: string;
+      colorCode: string | null;
+      variantOption: { id: string; name: string; type: string } | null;
+    }>;
   } | null;
 }
 
