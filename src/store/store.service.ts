@@ -551,7 +551,8 @@ export class StoreService {
     }
 
     /**
-     * Kategori slug'larını ID'lere çevir ve genişlet - seçilen kategorilerin tüm parent ve child'larını dahil et
+     * Kategori slug'larını ID'lere çevir ve genişlet: sadece seçilen kategoriler + tüm alt kategorileri (parent dahil değil).
+     * Bir kategori seçildiğinde o kategori ve altındaki bütün kategorilerdeki ürünler getirilir.
      */
     private async expandCategorySlugs(categorySlugs: string[]): Promise<string[]> {
         if (categorySlugs.length === 0) return [];
@@ -559,50 +560,37 @@ export class StoreService {
         // Slug'lara göre kategorileri bul
         const categories = await this.categoryRepository.find({
             where: { slug: In(categorySlugs) },
-            relations: ['parent', 'children'],
+            relations: ['children'],
         });
 
         if (categories.length === 0) return [];
 
         const categoryIds = categories.map(cat => cat.id);
 
-        // Tüm kategorileri yükle (parent/child ilişkileri için)
+        // Tüm kategorileri yükle (child ilişkileri için - sadece aşağı doğru genişletiyoruz)
         const allCategories = await this.categoryRepository.find({
-            relations: ['parent', 'children'],
+            relations: ['children'],
         });
 
-        const categoryMap = new Map<string, { parentId: string | null; childrenIds: string[] }>();
+        const categoryMap = new Map<string, { childrenIds: string[] }>();
         allCategories.forEach(cat => {
             categoryMap.set(cat.id, {
-                parentId: cat.parentId,
                 childrenIds: cat.children?.map(c => c.id) || [],
             });
         });
 
         const expandedIds = new Set<string>();
 
-        // Her seçili kategori için:
-        for (const categoryId of categoryIds) {
-            expandedIds.add(categoryId);
-
-            // Tüm parent'ları ekle
-            let current = categoryMap.get(categoryId);
-            while (current?.parentId) {
-                expandedIds.add(current.parentId);
-                current = categoryMap.get(current.parentId);
+        const addSelfAndChildren = (id: string) => {
+            expandedIds.add(id);
+            const cat = categoryMap.get(id);
+            if (cat) {
+                cat.childrenIds.forEach(childId => addSelfAndChildren(childId));
             }
+        };
 
-            // Tüm children'ları ekle (recursive)
-            const addChildren = (id: string) => {
-                const cat = categoryMap.get(id);
-                if (cat) {
-                    cat.childrenIds.forEach(childId => {
-                        expandedIds.add(childId);
-                        addChildren(childId);
-                    });
-                }
-            };
-            addChildren(categoryId);
+        for (const categoryId of categoryIds) {
+            addSelfAndChildren(categoryId);
         }
 
         return Array.from(expandedIds);
