@@ -204,12 +204,16 @@ export class IyzicoProvider implements PaymentProvider {
             }),
         };
 
-            this.logger.debug(`[initializeCheckout] Iyzico request prepared: ${JSON.stringify({ ...request, buyer: { ...request.buyer, email: '***', gsmNumber: '***', identityNumber: '***' } })}`);
+            const basketSum = request.basketItems.reduce((s, i) => s + parseFloat(i.price), 0);
+            this.logger.log(`[initializeCheckout] Iyzico'ya giden istek - price/paidPrice: ${request.price} ${request.currency}, basketId: ${request.basketId}, basketItems toplamı: ${basketSum.toFixed(2)}, kalem sayısı: ${request.basketItems.length}`);
+            this.logger.log(`[initializeCheckout] Iyzico basketItems: ${JSON.stringify(request.basketItems.map((i) => ({ id: i.id, name: i.name?.substring(0, 50), price: i.price, category1: i.category1, itemType: i.itemType })))}`);
+            this.logger.debug(`[initializeCheckout] Iyzico full request (buyer masked): ${JSON.stringify({ ...request, buyer: { ...request.buyer, email: '***', gsmNumber: '***', identityNumber: '***' } })}`);
 
             this.logger.log(`[initializeCheckout] Calling Iyzico API initializeCheckoutForm...`);
             const response = await this.httpClient.initializeCheckoutForm(request);
 
-            this.logger.debug(`[initializeCheckout] Iyzico response received: ${JSON.stringify({ status: response.status, conversationId: response.conversationId, token: response.token ? response.token.substring(0, 20) + '...' : 'MISSING', paymentPageUrl: response.paymentPageUrl ? response.paymentPageUrl.substring(0, 50) + '...' : 'MISSING' })}`);
+            this.logger.log(`[initializeCheckout] Iyzico response - status: ${response.status}, errorCode: ${response.errorCode ?? 'yok'}, errorMessage: ${response.errorMessage ?? 'yok'}, token: ${response.token ? 'var' : 'yok'}, paymentPageUrl: ${response.paymentPageUrl ? 'var' : 'yok'}`);
+            this.logger.debug(`[initializeCheckout] Iyzico full response: ${JSON.stringify(response)}`);
 
             if (!response.token || !response.paymentPageUrl) {
                 this.logger.error(`[initializeCheckout] Iyzico initialization failed - token: ${response.token ? 'present' : 'MISSING'}, paymentPageUrl: ${response.paymentPageUrl ? 'present' : 'MISSING'}, errorCode: ${response.errorCode}, errorMessage: ${response.errorMessage}`);

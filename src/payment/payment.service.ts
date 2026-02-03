@@ -277,11 +277,14 @@ export class PaymentService {
                 ? parseFloat(orderEntity.discount)
                 : Number(orderEntity.discount);
 
-            // Prepare basket items (product items first). Type allows PHYSICAL and VIRTUAL for shipping/discount.
+            // Iyzico requires all basket item prices to be positive. Distribute order discount
+            // across product items so we don't send a negative "İndirim" line.
             type BasketItem = { id: string; name: string; category1: string; category2?: string; itemType: 'PHYSICAL' | 'VIRTUAL'; price: number };
             this.logger.debug(`[createCheckout] Preparing ${orderEntity.items.length} basket items...`);
+
+            const productsTotalAfterDiscount = Math.round((orderSubtotal - orderDiscount) * 100) / 100;
+
             const basketItems: BasketItem[] = orderEntity.items.map((item, index) => {
-                // Iyzico requires basketItems[].price to be the total price for that item
                 const itemTotalPrice = typeof item.totalPrice === 'string'
                     ? parseFloat(item.totalPrice)
                     : Number(item.totalPrice);
@@ -297,7 +300,13 @@ export class PaymentService {
                 const category2 = categories[1]?.name || categories[0]?.parent?.name || undefined;
                 const basketItemId = item.id;
 
-                this.logger.debug(`[createCheckout] Basket item ${index + 1}: ${item.productName}, quantity: ${item.quantity}, totalPrice: ${itemTotalPrice}, category1: ${category1}, category2: ${category2 || 'N/A'}`);
+                // Distribute discount proportionally: item price = (item / subtotal) * (subtotal - discount)
+                const itemPrice = orderSubtotal > 0
+                    ? Math.round((itemTotalPrice / orderSubtotal) * productsTotalAfterDiscount * 100) / 100
+                    : 0;
+                const price = Math.max(0.01, itemPrice); // Iyzico requires positive price
+
+                this.logger.debug(`[createCheckout] Basket item ${index + 1}: ${item.productName}, quantity: ${item.quantity}, totalPrice: ${itemTotalPrice}, price after discount: ${price}, category1: ${category1}, category2: ${category2 || 'N/A'}`);
 
                 return {
                     id: basketItemId,
@@ -305,9 +314,19 @@ export class PaymentService {
                     category1: category1,
                     ...(category2 && { category2: category2 }),
                     itemType: 'PHYSICAL' as const,
-                    price: itemTotalPrice,
+                    price,
                 };
             });
+
+            // Fix rounding: ensure product items sum exactly to productsTotalAfterDiscount (adjust last item)
+            const productSum = basketItems.reduce((sum, item) => sum + item.price, 0);
+            const productDiff = Math.round((productsTotalAfterDiscount - productSum) * 100) / 100;
+            if (basketItems.length > 0 && Math.abs(productDiff) > 0) {
+                basketItems[basketItems.length - 1].price = Math.round((basketItems[basketItems.length - 1].price + productDiff) * 100) / 100;
+                if (basketItems[basketItems.length - 1].price < 0.01) {
+                    basketItems[basketItems.length - 1].price = 0.01;
+                }
+            }
 
             // Add shipping as basket item so sum(basketItems) === order.total
             if (orderShipping > 0) {
@@ -319,18 +338,8 @@ export class PaymentService {
                     price: Math.round(orderShipping * 100) / 100,
                 });
             }
-            // Add discount as negative basket item (İndirim) so total matches
-            if (orderDiscount > 0) {
-                basketItems.push({
-                    id: `discount-${orderEntity.id}`,
-                    name: 'İndirim',
-                    category1: 'Discount',
-                    itemType: 'VIRTUAL' as const,
-                    price: Math.round(-orderDiscount * 100) / 100,
-                });
-            }
 
-            // Validate that basketItems total equals order total
+            // Validate that basketItems total equals order total (no negative discount line - Iyzico rejects it)
             const basketItemsTotal = Math.round(basketItems.reduce((sum, item) => sum + item.price, 0) * 100) / 100;
             this.logger.debug(`[createCheckout] Basket items total: ${basketItemsTotal}, Order total: ${totalAmount} (subtotal: ${orderSubtotal}, shipping: ${orderShipping}, discount: ${orderDiscount})`);
 
@@ -342,6 +351,9 @@ export class PaymentService {
                 this.logger.warn(`[createCheckout] Small rounding difference: ${difference.toFixed(4)}. Adjusting total to match basket.`);
                 totalAmount = basketItemsTotal;
             }
+
+            this.logger.log(`[createCheckout] Iyzico'ya gidecek payload - amount: ${totalAmount} ${orderEntity.currency}, basketItemsCount: ${basketItems.length}`);
+            this.logger.log(`[createCheckout] Basket items: ${JSON.stringify(basketItems.map((i) => ({ id: i.id, name: i.name.substring(0, 40), price: i.price, category1: i.category1, itemType: i.itemType })))}`);
 
             this.logger.log(`[createCheckout] Calling provider.initializeCheckout for order ${checkoutDto.orderId}...`);
             const result = await providerInstance.initializeCheckout({
