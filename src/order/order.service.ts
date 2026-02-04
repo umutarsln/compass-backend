@@ -127,11 +127,8 @@ export class OrderService {
     }
 
     const shippingCost = createOrderDto.shippingCost || 0;
-    const total = Math.round((subtotal + shippingCost - discount) * 100) / 100;
-
-    if (total <= 0) {
-      throw new BadRequestException('Order total must be greater than 0');
-    }
+    const totalRaw = Math.round((subtotal + shippingCost - discount) * 100) / 100;
+    const total = totalRaw <= 0 ? 0 : totalRaw;
 
     // Create order in transaction
     const queryRunner = this.dataSource.createQueryRunner();

@@ -146,6 +146,47 @@ export class PaymentService {
                 throw new BadRequestException('Order is already paid');
             }
 
+            const orderTotal = typeof orderEntity.total === 'string' ? parseFloat(orderEntity.total) : Number(orderEntity.total);
+            if (orderTotal <= 0) {
+                this.logger.log(`[createCheckout] Order ${checkoutDto.orderId} total is ${orderTotal} – treating as free order, marking PAID without payment provider`);
+                if (orderTotal < 0) {
+                    orderEntity.total = 0;
+                    await this.orderRepository.save(orderEntity);
+                }
+                const freeAttempt = this.paymentAttemptRepository.create({
+                    orderId: checkoutDto.orderId,
+                    provider: PaymentProvider.FREE_ORDER,
+                    status: PaymentStatus.SUCCESS,
+                    conversationId: this.generateConversationId(),
+                    amount: 0,
+                    currency: orderEntity.currency,
+                });
+                const savedFreeAttempt = await this.paymentAttemptRepository.save(freeAttempt);
+                await this.orderService.markOrderAsPaid(checkoutDto.orderId, 'FREE_ORDER', savedFreeAttempt.id);
+                if (orderEntity.couponId) {
+                    try {
+                        await this.couponService.incrementUsage(orderEntity.couponId);
+                        this.logger.log(`[createCheckout] Coupon ${orderEntity.couponId} usage incremented (free order)`);
+                    } catch (e: any) {
+                        this.logger.warn(`[createCheckout] Failed to increment coupon usage: ${e?.message}`);
+                    }
+                }
+                if (orderEntity.cartId) {
+                    try {
+                        await this.cartService.clearCart(orderEntity.cartId);
+                        this.logger.log(`[createCheckout] Cart ${orderEntity.cartId} cleared (free order)`);
+                    } catch (e: any) {
+                        this.logger.warn(`[createCheckout] Failed to clear cart: ${e?.message}`);
+                    }
+                }
+                return {
+                    attemptId: savedFreeAttempt.id,
+                    provider: PaymentProvider.FREE_ORDER,
+                    redirectUrl: '',
+                    paymentNotRequired: true,
+                };
+            }
+
             // Determine provider
             const provider =
                 checkoutDto.provider ||
