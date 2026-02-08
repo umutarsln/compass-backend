@@ -232,10 +232,8 @@ export class OrderService {
       'items.variant.galleries.thumbnailImage',
       'items.variant.variantValues',
       'items.variant.variantValues.variantOption',
+      'user', // Kayıtlı kullanıcı siparişlerinde isim/email için
     ];
-    if (includeUser) {
-      relations.push('user');
-    }
 
     const order = await this.orderRepository.findOne({
       where: { id: orderId },
@@ -279,6 +277,7 @@ export class OrderService {
         'items.variant.galleries.thumbnailImage',
         'items.variant.variantValues',
         'items.variant.variantValues.variantOption',
+        'user',
       ],
     });
 
@@ -314,6 +313,7 @@ export class OrderService {
         'items.variant',
         'items.variant.variantValues',
         'items.variant.variantValues.variantOption',
+        'user',
       ],
       order: { createdAt: 'DESC' },
     });
@@ -459,6 +459,14 @@ export class OrderService {
       id: order.id,
       orderNo: order.orderNo,
       userId: order.userId,
+      user: order.user
+        ? {
+          email: order.user.email,
+          firstname: order.user.firstname,
+          lastname: order.user.lastname,
+          phone: order.user.phone ?? null,
+        }
+        : undefined,
       cartId: order.cartId,
       guestEmail: order.guestEmail,
       guestPhone: order.guestPhone,

@@ -57,10 +57,20 @@ export class OrderItemResponseDto {
   } | null;
 }
 
+/** Kayıtlı kullanıcı bilgisi (sipariş userId ile verilmişse dolu) */
+export class OrderUserDto {
+  email: string;
+  firstname: string;
+  lastname: string;
+  phone: string | null;
+}
+
 export class OrderResponseDto {
   id: string;
   orderNo: string; // 8 haneli unique sipariş numarası
   userId: string | null;
+  /** Kayıtlı kullanıcı siparişi ise ad, soyad, email, telefon */
+  user?: OrderUserDto | null;
   cartId: string | null;
   guestEmail: string | null;
   guestPhone: string | null;
