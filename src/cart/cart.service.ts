@@ -18,6 +18,7 @@ import { CartPersonalizationPricingService } from '../personalization/cart-perso
 import { PersonalizationSnapshotService } from '../personalization/personalization-snapshot.service';
 import { CouponService } from '../coupon/coupon.service';
 import { Coupon } from '../coupon/coupon.entity';
+import { addVat } from '../common/vat';
 
 export interface CartTotals {
     subtotal: number;
@@ -197,13 +198,13 @@ export class CartService {
      * If coupon is applied but no longer valid, clears it and returns 0 discount.
      */
     async getCartTotals(cart: Cart): Promise<CartTotals> {
-        const subtotal = Math.round(this.getCartSubtotal(cart) * 100) / 100;
+        const subtotalExVat = Math.round(this.getCartSubtotal(cart) * 100) / 100;
 
         if (!cart.couponId || !cart.coupon) {
             return {
-                subtotal,
+                subtotal: addVat(subtotalExVat),
                 discountAmount: 0,
-                total: subtotal,
+                total: addVat(subtotalExVat),
                 appliedCoupon: null,
             };
         }
@@ -211,20 +212,20 @@ export class CartService {
         try {
             const { coupon, discountAmount } = await this.couponService.validateForCart(
                 cart.coupon.code,
-                subtotal,
+                subtotalExVat,
             );
-            const total = Math.round((subtotal - discountAmount) * 100) / 100;
+            const totalExVat = Math.round((subtotalExVat - discountAmount) * 100) / 100;
             return {
-                subtotal,
-                discountAmount,
-                total,
+                subtotal: addVat(subtotalExVat),
+                discountAmount: addVat(discountAmount),
+                total: addVat(totalExVat),
                 appliedCoupon: {
                     id: coupon.id,
                     code: coupon.code,
                     name: coupon.name,
                     type: coupon.type,
                     discountValue: Number(coupon.discountValue),
-                    discountAmount,
+                    discountAmount: addVat(discountAmount),
                 },
             };
         } catch {
@@ -233,9 +234,9 @@ export class CartService {
             cart.coupon = null;
             await this.cartRepository.save(cart);
             return {
-                subtotal,
+                subtotal: addVat(subtotalExVat),
                 discountAmount: 0,
-                total: subtotal,
+                total: addVat(subtotalExVat),
                 appliedCoupon: null,
             };
         }

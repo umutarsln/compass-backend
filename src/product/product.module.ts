@@ -13,9 +13,11 @@ import { Tag } from '../tag/tag.entity';
 import { Upload } from '../upload/upload.entity';
 import { Stock } from '../stock/stock.entity';
 import { StockModule } from '../stock/stock.module';
+import { CacheModule } from '../cache/cache.module';
 
 @Module({
   imports: [
+    CacheModule,
     TypeOrmModule.forFeature([
       Product,
       VariantOption,

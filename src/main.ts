@@ -1,16 +1,60 @@
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { EndpointRolesGuard } from './auth/guards/endpoint-roles.guard';
 
+/**
+ * .env / process.env.PORT üzerinden dinlenecek TCP portunu hesaplar.
+ * @returns {{ listenPort: number; portRaw: string | undefined }}
+ */
+function resolveListenPort(): { listenPort: number; portRaw: string | undefined } {
+  const portRaw = process.env.PORT;
+  const port = portRaw !== undefined && portRaw !== '' ? Number(portRaw) : 4141;
+  const listenPort = Number.isFinite(port) && port > 0 ? port : 4141;
+  return { listenPort, portRaw };
+}
+
+/** Nest uygulamasını ayağa kaldırır: CORS, validasyon, Swagger ve global guard. */
 async function bootstrap() {
+  const { listenPort, portRaw } = resolveListenPort();
+  const bootLogger = new Logger('Bootstrap');
+
+  // app.listen öncesi: modül gürültüsünden önce port görünsün
+  console.log('');
+  console.log('══════════════════════════════════════════════════════════');
+  console.log(
+    `  BACKEND HTTP PORT (hedef): ${listenPort}   |   env PORT=${portRaw ?? '(yok → 4141)'}`,
+  );
+  console.log(`  Örnek: http://127.0.0.1:${listenPort}   Swagger: /api`);
+  console.log('══════════════════════════════════════════════════════════');
+  console.log('');
+
+  bootLogger.log(
+    `Dinleme hazırlığı: port=${listenPort} (process.env.PORT=${portRaw ?? 'tanımsız'})`,
+  );
+
   const app = await NestFactory.create(AppModule);
   const reflector = app.get(Reflector);
 
-  // CORS Configuration
+  // CORS: yerel Store 3000, Admin 3001; eski 7600/7601 + 127.0.0.1 eşdeğerleri
+  const corsOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:7600',
+    'http://localhost:7601',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    'http://127.0.0.1:7600',
+    'http://127.0.0.1:7601',
+    'https://compass.com.tr',
+    'http://compass.com.tr',
+    'https://admin.compass.com.tr',
+    'http://admin.compass.com.tr',
+  ];
+
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:7600', 'http://localhost:7601', 'https://shawk.com.tr', 'http://shawk.com.tr', 'https://admin.shawk.com.tr', 'http://admin.shawk.com.tr'],
+    origin: corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-guest-id', 'x-cart-id'],
     credentials: true,
@@ -48,6 +92,29 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  await app.listen(process.env.PORT ?? 7602, '0.0.0.0');
+  await app.listen(listenPort, '0.0.0.0');
+
+  const server = app.getHttpServer();
+  const addr = server.address();
+  const boundPort =
+    addr && typeof addr === 'object' && 'port' in addr ? addr.port : listenPort;
+
+  console.log('');
+  console.log('══════════════════════════════════════════════════════════');
+  console.log(`  BACKEND AYAKTA — dinlenen port: ${boundPort}`);
+  console.log(`  http://127.0.0.1:${boundPort}  |  http://localhost:${boundPort}`);
+  console.log(`  Swagger: http://127.0.0.1:${boundPort}/api`);
+  console.log('══════════════════════════════════════════════════════════');
+  console.log('');
+
+  bootLogger.log(
+    `HTTP dinleniyor: 0.0.0.0:${boundPort} → http://127.0.0.1:${boundPort}`,
+  );
+  bootLogger.log(`Swagger UI: http://127.0.0.1:${boundPort}/api`);
+  if (portRaw !== undefined && portRaw !== '' && listenPort !== Number(portRaw)) {
+    bootLogger.warn(
+      `PORT="${portRaw}" geçersiz veya 0; ${listenPort} kullanıldı.`,
+    );
+  }
 }
 bootstrap();

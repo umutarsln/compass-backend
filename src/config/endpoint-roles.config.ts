@@ -20,6 +20,8 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'POST /auth/register': [], // Public - herkes erişebilir (auth gerekmez)
     'POST /auth/login': [], // Public - herkes erişebilir (auth gerekmez)
     'POST /auth/refresh': [], // Public - herkes erişebilir (auth gerekmez)
+    'POST /auth/store/register': [], // Mağaza müşteri kaydı (public)
+    'POST /auth/store/login': [], // Mağaza müşteri girişi (public)
     'POST /auth/logout': [Role.USER, Role.ADMIN], // Authenticated users (auth gerekli)
 
     // User Endpoints

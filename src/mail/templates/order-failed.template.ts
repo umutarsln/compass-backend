@@ -86,7 +86,7 @@ export function generateOrderFailedEmailHtml(
 
               <!-- CTA Button -->
               <div style="text-align: center; margin-top: 30px;">
-                <a href="${configService.get<string>('FRONTEND_SUCCESS_URL')?.replace('/basarili', '/sepet') || 'https://shawk.com.tr/sepet'}" 
+                <a href="${configService.get<string>('FRONTEND_SUCCESS_URL')?.replace('/basarili', '/sepet') || 'https://compass.com.tr/sepet'}" 
                    style="display: inline-block; padding: 14px 32px; background-color: #1a1a1a; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                   Sepetime Dön
                 </a>

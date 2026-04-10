@@ -18,7 +18,7 @@ import { ProductGallery } from './product-gallery.entity';
 import { Stock } from '../stock/stock.entity';
 
 @Entity('variant_combinations')
-@Unique('unique_slug', ['slug'])
+@Unique('uq_variant_combination_slug', ['slug'])
 export class VariantCombination {
   @PrimaryGeneratedColumn('uuid')
   id: string;

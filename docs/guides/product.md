@@ -78,7 +78,7 @@ Yeni bir ürün oluşturur.
 **Yetkilendirme:** ADMIN
 
 **Notlar:**
-- SIMPLE product oluşturulduğunda otomatik stok kaydı oluşturulur
+- SIMPLE ve BUNDLE ürün oluşturulduğunda ürün stok kaydı otomatik oluşturulur (mağaza listesi için)
 - Slug otomatik oluşturulur
 - SKU unique olmalı
 
@@ -167,6 +167,21 @@ Belirli bir ürünün detaylarını getirir.
 ```
 
 **Yetkilendirme:** ADMIN
+
+## Mağaza (Store) görünürlüğü
+
+- **GET** `/store/products`: **SIMPLE** ve **BUNDLE** ürünler doğrudan listelenir. **VARIANT** ürünler yalnızca en az bir **aktif** ve **devre dışı olmayan** kombinasyon tanımlıysa görünür (her kombinasyon ayrı liste satırıdır).
+- **isActive: false** olan ürünler mağaza uçlarında dönmez.
+- Ürün oluşturma/güncelleme/silme ile varyasyon kombinasyonu oluşturma/güncelleme sonrası sunucu önbelleği temizlenir; yeni veya güncellenmiş ürünler `/store/products` ve detayda gecikmesiz yansır.
+
+### Statik mağaza verisini DB’ye aktarma
+
+Store’daki örnek katalog (`shawk-ecommerce-store/lib/static-product-details.ts` ile aynı içerik `scripts/seed-store-static-catalog-data.mjs` dosyasında tutulur) şu komutla PostgreSQL’e yazılabilir:
+
+- `npm run seed:store-static` (önce en az bir ADMIN: `npm run seed:admin`)
+- `STOREFRONT_PUBLIC_URL` — upload `s3Url` için site kökü (varsayılan `http://localhost:3000`)
+- `SEED_USD_TRY_RATE` — USD→TRY kuru (varsayılan `39`)
+- `SEED_SKIP_EXISTING=false` — aynı `slug`’lı ürün varken yeniden ekleme denemesi yapılır (çakışmada hata alırsınız)
 
 ## Fiyat Hesaplama
 

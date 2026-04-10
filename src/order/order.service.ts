@@ -25,6 +25,7 @@ import { PaymentAttempt } from '../payment/payment-attempt.entity';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { PaymentProvider } from '../common/enums/payment-provider.enum';
 import { CouponService } from '../coupon/coupon.service';
+import { addVat } from '../common/vat';
 
 @Injectable()
 export class OrderService {
@@ -105,8 +106,8 @@ export class OrderService {
       }
     }
 
-    // Calculate subtotal
-    const subtotal = Math.round(
+    // Ara toplam (ürün fiyatları KDV hariç; sipariş kaydında KDV dahil tutulur)
+    const subtotalExVat = Math.round(
       cart.items.reduce((sum, item) => {
         const price = item.discountedPrice || item.basePrice;
         return sum + Number(price) * item.quantity;
@@ -114,12 +115,12 @@ export class OrderService {
     ) / 100;
 
     // Validate and resolve coupon discount (backend always re-validates)
-    let discount = 0;
+    let discountExVat = 0;
     let orderCouponId: string | null = null;
     if (cart.couponId && cart.coupon) {
       try {
-        const result = await this.couponService.validateForCart(cart.coupon.code, subtotal);
-        discount = result.discountAmount;
+        const result = await this.couponService.validateForCart(cart.coupon.code, subtotalExVat);
+        discountExVat = result.discountAmount;
         orderCouponId = result.coupon.id;
       } catch {
         throw new BadRequestException('Kupon artık geçerli değil. Lütfen kuponu kaldırıp tekrar deneyin.');
@@ -127,8 +128,10 @@ export class OrderService {
     }
 
     const shippingCost = createOrderDto.shippingCost || 0;
-    const totalRaw = Math.round((subtotal + shippingCost - discount) * 100) / 100;
-    const total = totalRaw <= 0 ? 0 : totalRaw;
+    const netExVat = Math.round((subtotalExVat + shippingCost - discountExVat) * 100) / 100;
+    const total = netExVat <= 0 ? 0 : addVat(netExVat);
+    const subtotal = addVat(subtotalExVat);
+    const discount = addVat(discountExVat);
 
     // Create order in transaction
     const queryRunner = this.dataSource.createQueryRunner();
@@ -165,8 +168,10 @@ export class OrderService {
 
       // Create order items
       const orderItems = cart.items.map((cartItem) => {
-        const unitPrice = Number(cartItem.discountedPrice || cartItem.basePrice);
-        const totalPrice = unitPrice * cartItem.quantity;
+        const unitPriceExVat = Number(cartItem.discountedPrice || cartItem.basePrice);
+        const unitPrice = addVat(unitPriceExVat);
+        const totalPrice =
+          Math.round(unitPrice * cartItem.quantity * 100) / 100;
 
         return queryRunner.manager.create(OrderItem, {
           orderId: savedOrder.id,
@@ -175,7 +180,9 @@ export class OrderService {
           productName: cartItem.product.name,
           quantity: cartItem.quantity,
           unitPrice,
-          discountedPrice: cartItem.discountedPrice ? Number(cartItem.discountedPrice) : null,
+          discountedPrice: cartItem.discountedPrice
+            ? addVat(Number(cartItem.discountedPrice))
+            : null,
           totalPrice,
           currency: cartItem.currency,
           personalization: cartItem.personalization || null, // Copy snapshot from cart

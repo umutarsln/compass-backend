@@ -30,7 +30,7 @@ export function generateOrderSuccessEmailHtml(
   itemsWithImages: OrderItemWithImage[],
   configService: ConfigService,
 ): string {
-  const appPublicUrl = configService.get<string>('APP_PUBLIC_URL') || 'https://shawk.com.tr';
+  const appPublicUrl = configService.get<string>('APP_PUBLIC_URL') || 'https://compass.com.tr';
   const customerName = order.userId
     ? `${order.user?.firstname || ''} ${order.user?.lastname || ''}`.trim() || 'Değerli Müşterimiz'
     : `${order.guestFirstName || ''} ${order.guestLastName || ''}`.trim() || 'Değerli Müşterimiz';

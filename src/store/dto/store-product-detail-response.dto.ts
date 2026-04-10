@@ -98,8 +98,8 @@ export class StoreProductDetailResponseDto {
   @ApiProperty({ nullable: true })
   discountedPrice: number | null;
 
-  @ApiProperty()
-  type: 'SIMPLE' | 'VARIANT';
+  @ApiProperty({ enum: ['SIMPLE', 'VARIANT', 'BUNDLE'] })
+  type: 'SIMPLE' | 'VARIANT' | 'BUNDLE';
 
   @ApiProperty()
   gallery: StoreProductGalleryDto;

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
@@ -29,9 +30,12 @@ import { UpdateVariantValueDto } from './dto/update-variant-value.dto';
 import { CreateVariantCombinationDto } from './dto/create-variant-combination.dto';
 import { UpdateVariantCombinationDto } from './dto/update-variant-combination.dto';
 import { generateSlug } from '../common/utils/slug.util';
+import { CacheService } from '../cache/cache.service';
 
 @Injectable()
 export class ProductService {
+  private readonly logger = new Logger(ProductService.name);
+
   constructor(
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
@@ -53,7 +57,27 @@ export class ProductService {
     private stockRepository: Repository<Stock>,
     private stockService: StockService,
     private dataSource: DataSource,
+    private readonly cacheService: CacheService,
   ) { }
+
+  /**
+   * Ürün veya varyasyon verisi değişince mağaza listesi/detay önbelleğinin güncel kalması için önbelleği temizler.
+   */
+  private async invalidateStoreCachesAfterProductChange(): Promise<void> {
+    try {
+      await this.cacheService.clearCache();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Mağaza önbelleği temizlenemedi: ${message}`);
+    }
+  }
+
+  /**
+   * SIMPLE veya BUNDLE ürün için tek ProductGallery kuralı geçerli midir kontrol eder.
+   */
+  private isSimpleOrBundleProductType(type: ProductType): boolean {
+    return type === ProductType.SIMPLE || type === ProductType.BUNDLE;
+  }
 
   /**
    * Benzersiz slug oluşturur
@@ -212,8 +236,8 @@ export class ProductService {
 
     const savedProduct = await this.productRepository.save(product);
 
-    // SIMPLE product için stock kaydı oluştur (relation ile)
-    if (savedProduct.type === ProductType.SIMPLE) {
+    // SIMPLE ve BUNDLE için ürün stok kaydı (mağaza listesi stok alanı için)
+    if (savedProduct.type === ProductType.SIMPLE || savedProduct.type === ProductType.BUNDLE) {
       const stock = this.stockRepository.create({
         sellableType: SellableType.PRODUCT,
         sellableId: savedProduct.id,
@@ -225,10 +249,12 @@ export class ProductService {
     }
 
     // Stock relation'ı ile birlikte döndür
-    return await this.productRepository.findOne({
+    const created = await this.productRepository.findOne({
       where: { id: savedProduct.id },
       relations: ['stock', 'categories', 'tags', 'createdBy'],
     }) || savedProduct;
+    await this.invalidateStoreCachesAfterProductChange();
+    return created;
   }
 
   async findAll(): Promise<Product[]> {
@@ -343,7 +369,9 @@ export class ProductService {
       product.discountedPrice = discountedPrice;
     }
 
-    return await this.productRepository.save(product);
+    const updated = await this.productRepository.save(product);
+    await this.invalidateStoreCachesAfterProductChange();
+    return updated;
   }
 
   async remove(id: string): Promise<void> {
@@ -474,6 +502,7 @@ export class ProductService {
       // Basit ürünler için normal silme işlemi (CASCADE çalışır)
       await this.productRepository.remove(product);
     }
+    await this.invalidateStoreCachesAfterProductChange();
   }
 
   // ==================== ProductGallery Methods ====================
@@ -511,8 +540,8 @@ export class ProductService {
         throw new NotFoundException('Ürün bulunamadı');
       }
 
-      // Basit ürün için zaten bir ProductGallery var mı kontrol et
-      if (product.type === ProductType.SIMPLE) {
+      // Basit / paket ürün için zaten bir ProductGallery var mı kontrol et
+      if (this.isSimpleOrBundleProductType(product.type)) {
         const existingGallery = await this.productGalleryRepository.findOne({
           where: { productId: createProductGalleryDto.productId },
         });
@@ -756,8 +785,8 @@ export class ProductService {
         throw new NotFoundException('Ürün bulunamadı');
       }
 
-      // Başka bir ProductGallery ile çakışma kontrolü
-      if (product.type === ProductType.SIMPLE) {
+      // Başka bir ProductGallery ile çakışma kontrolü (basit / paket)
+      if (this.isSimpleOrBundleProductType(product.type)) {
         const existingGallery = await this.productGalleryRepository.findOne({
           where: {
             productId: updateProductGalleryDto.productId,
@@ -1693,6 +1722,7 @@ export class ProductService {
       throw new NotFoundException('Varyasyon kombinasyonu oluşturulduktan sonra bulunamadı');
     }
 
+    await this.invalidateStoreCachesAfterProductChange();
     return result;
   }
 
@@ -1785,6 +1815,7 @@ export class ProductService {
       throw new NotFoundException('Varyasyon kombinasyonu güncellendikten sonra bulunamadı');
     }
 
+    await this.invalidateStoreCachesAfterProductChange();
     return result;
   }
 

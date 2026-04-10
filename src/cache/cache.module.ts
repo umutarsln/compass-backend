@@ -5,6 +5,7 @@ import * as redisStore from 'cache-manager-redis-store';
 import { CacheService } from './cache.service';
 import { CacheController } from './cache.controller';
 
+/** Global cache (Redis store); Redis yoksa bağlantı denemesi kısa sürede kesilir. */
 @Module({
     imports: [
         NestCacheModule.registerAsync({
@@ -38,21 +39,22 @@ import { CacheController } from './cache.controller';
                     config.auth_pass = redisPassword;
                 }
 
-                // Retry stratejisi
+                // Redis yoksa log spam'i ve sonsuz denemeyi kes: undefined = yeniden deneme yok
                 config.retry_strategy = (options: any) => {
                     if (options.error && options.error.code === 'ECONNREFUSED') {
-                        logger.error('[CacheModule] Redis sunucusuna bağlanılamadı (ECONNREFUSED)');
-                        return new Error('Redis sunucusu reddetti');
+                        logger.warn(
+                            `[CacheModule] Redis erişilemiyor (${redisHost}:${redisPort}). Cache store bağlanamadı; HTTP API çalışmaya devam eder.`,
+                        );
+                        return undefined;
                     }
                     if (options.total_retry_time > 1000 * 60 * 60) {
                         logger.error('[CacheModule] Redis bağlantı denemeleri 1 saatten fazla sürdü');
-                        return new Error('Redis bağlantı denemeleri çok uzun sürdü');
+                        return undefined;
                     }
                     if (options.attempt > 10) {
-                        logger.error('[CacheModule] Redis bağlantı denemeleri 10\'u aştı');
-                        return undefined; // Retry durdur
+                        logger.warn('[CacheModule] Redis deneme sınırı; yeniden bağlanma durduruldu.');
+                        return undefined;
                     }
-                    // Exponential backoff: 100ms, 200ms, 400ms, ...
                     return Math.min(options.attempt * 100, 3000);
                 };
 

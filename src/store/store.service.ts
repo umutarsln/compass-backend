@@ -42,7 +42,7 @@ export class StoreService {
 
     /**
      * Mağaza için ürünleri getir
-     * Basit ürünler ve varyasyonlu ürünlerin aktif kombinasyonları ayrı ürünler olarak döner
+     * SIMPLE ve BUNDLE ürünler doğrudan; VARIANT ürünlerin aktif kombinasyonları ayrı satır olarak döner
      */
     async getProducts(query: StoreProductQueryDto): Promise<StoreProductListResponseDto> {
         const {
@@ -270,8 +270,8 @@ export class StoreService {
             }
         }
 
-        // Basit ürün için
-        if (product.type === ProductType.SIMPLE) {
+        // Basit ve paket (BUNDLE) ürün — liste ile aynı mantık; VARIANT değilse burada biter
+        if (product.type === ProductType.SIMPLE || product.type === ProductType.BUNDLE) {
             const baseGallery = this.getProductGallery(product);
             const price = this.calculatePrice(product);
             const result: StoreProductDetailResponseDto = {
@@ -282,7 +282,7 @@ export class StoreService {
                 description: product.description,
                 basePrice: Number(product.basePrice),
                 discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
-                type: 'SIMPLE' as const,
+                type: product.type === ProductType.BUNDLE ? ('BUNDLE' as const) : ('SIMPLE' as const),
                 gallery: baseGallery,
                 categories: (product.categories || []).map((cat) => ({
                     id: cat.id,
@@ -599,7 +599,7 @@ export class StoreService {
     // ==================== PRIVATE METHODS ====================
 
     /**
-     * Basit ürünleri getir
+     * Basit (SIMPLE) ve paket (BUNDLE) ürünleri getirir
      * Not: Bu metod internal kullanım için categoryIds ve tagIds bekler (slug'lardan çevrilmiş)
      */
     private async getSimpleProducts(params: {
@@ -623,7 +623,9 @@ export class StoreService {
             .leftJoinAndSelect('gallery.thumbnailImage', 'thumbnailImage')
             .leftJoinAndSelect('gallery.detailImages', 'detailImages')
             .leftJoinAndSelect('product.stock', 'stock')
-            .where('product.type = :type', { type: ProductType.SIMPLE })
+            .where('product.type IN (:...simpleOrBundleTypes)', {
+                simpleOrBundleTypes: [ProductType.SIMPLE, ProductType.BUNDLE],
+            })
             .andWhere('product.isActive = :isActive', { isActive: true });
 
         if (search) {

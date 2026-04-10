@@ -41,7 +41,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
         password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_DATABASE'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: true, // Production'da false yapılmalı
+        synchronize:
+          configService.get<string>('DB_SYNCHRONIZE') !== 'false',
       }),
       inject: [ConfigService],
     }),

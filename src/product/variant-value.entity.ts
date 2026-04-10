@@ -13,7 +13,7 @@ import {
 import { VariantOption } from './variant-option.entity';
 
 @Entity('variant_values')
-@Unique('unique_slug', ['variantOptionId', 'value'])
+@Unique('uq_variant_value_option_value', ['variantOptionId', 'value'])
 export class VariantValue {
   @PrimaryGeneratedColumn('uuid')
   id: string;

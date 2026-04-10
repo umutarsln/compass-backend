@@ -32,7 +32,11 @@ export class PaymentSettingsService {
             this.logger.log('[getSettings] No settings found, creating default settings');
             settings = this.paymentSettingsRepository.create({
                 iyzicoEnabled: false,
-                ibanEftEnabled: false,
+                ibanEftEnabled: true,
+                ibanNumber: 'TR08 0011 1000 0000 0130 1278 04',
+                accountName: 'İlev group iç ve dış ticaret ltd.şti',
+                bankName: 'QNB Finansbank',
+                whatsappNumber: null,
             });
             settings = await this.paymentSettingsRepository.save(settings);
         }
