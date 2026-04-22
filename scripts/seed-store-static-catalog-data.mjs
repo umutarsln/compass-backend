@@ -129,8 +129,8 @@ export const STATIC_CATALOG_PRODUCTS = [
     usdPrice: 1350,
     categorySlug: 'plotter-folyo-kesici',
     imagePaths: [
-      '/urunler/folyokesim/folyo-kesim-makinesi-plotter-kamera-135cm-net-kesim-alani-profesyonel/folyo-kesim-makinesi-plotter-kamera-135cm-net-kesim-alani-profesyonel-01-26f9bad3.png',
       '/urunler/folyokesim/folyo-kesim-makinesi-plotter-kamera-135cm-net-kesim-alani-profesyonel/folyo-kesim-makinesi-plotter-kamera-135cm-net-kesim-alani-profesyonel-02-55885071.png',
+      '/urunler/folyokesim/folyo-kesim-makinesi-plotter-kamera-135cm-net-kesim-alani-profesyonel/folyo-kesim-makinesi-plotter-kamera-135cm-net-kesim-alani-profesyonel-01-26f9bad3.png',
       '/urunler/folyokesim/folyo-kesim-makinesi-plotter-kamera-135cm-net-kesim-alani-profesyonel/folyo-kesim-makinesi-plotter-kamera-135cm-net-kesim-alani-profesyonel-03-f64a9eee.png',
     ],
   },
@@ -185,8 +185,8 @@ export const STATIC_CATALOG_PRODUCTS = [
     usdPrice: 1350,
     categorySlug: 'plotter-folyo-kesici',
     imagePaths: [
-      '/urunler/folyokesim/plotter-folyo-kesim-makinesi-kamerali-135cm-net-kesim-alani/plotter-folyo-kesim-makinesi-kamerali-135cm-net-kesim-alani-01-0926d2c4.png',
       '/urunler/folyokesim/plotter-folyo-kesim-makinesi-kamerali-135cm-net-kesim-alani/plotter-folyo-kesim-makinesi-kamerali-135cm-net-kesim-alani-02-0ea18486.png',
+      '/urunler/folyokesim/plotter-folyo-kesim-makinesi-kamerali-135cm-net-kesim-alani/plotter-folyo-kesim-makinesi-kamerali-135cm-net-kesim-alani-01-0926d2c4.png',
       '/urunler/folyokesim/plotter-folyo-kesim-makinesi-kamerali-135cm-net-kesim-alani/plotter-folyo-kesim-makinesi-kamerali-135cm-net-kesim-alani-03-14a26bf1.png',
     ],
   },
@@ -205,8 +205,8 @@ export const STATIC_CATALOG_PRODUCTS = [
     usdPrice: 2500,
     categorySlug: 'plotter-folyo-kesici',
     imagePaths: [
-      '/urunler/folyokesim/plotter-ppf-folyo-kesim-makinesi-kamerali-160cm-net-kesim-alani/plotter-ppf-folyo-kesim-makinesi-kamerali-160cm-net-kesim-alani-01-0926d2c4.png',
       '/urunler/folyokesim/plotter-ppf-folyo-kesim-makinesi-kamerali-160cm-net-kesim-alani/plotter-ppf-folyo-kesim-makinesi-kamerali-160cm-net-kesim-alani-02-0ea18486.png',
+      '/urunler/folyokesim/plotter-ppf-folyo-kesim-makinesi-kamerali-160cm-net-kesim-alani/plotter-ppf-folyo-kesim-makinesi-kamerali-160cm-net-kesim-alani-01-0926d2c4.png',
       '/urunler/folyokesim/plotter-ppf-folyo-kesim-makinesi-kamerali-160cm-net-kesim-alani/plotter-ppf-folyo-kesim-makinesi-kamerali-160cm-net-kesim-alani-03-14a26bf1.png',
     ],
   },
@@ -227,6 +227,7 @@ export const STATIC_CATALOG_PRODUCTS = [
     imagePaths: [
       '/urunler/folyokesim/dijital-baski-makinesi-180-cm-genislik-yuksek-hiz-endustriyel-kalite/dijital-baski-makinesi-180-cm-genislik-yuksek-hiz-endustriyel-kalite-01-756efd81.png',
       '/urunler/folyokesim/dijital-baski-makinesi-180-cm-genislik-yuksek-hiz-endustriyel-kalite/dijital-baski-makinesi-180-cm-genislik-yuksek-hiz-endustriyel-kalite-02-aafc3f2b.jpg',
+      '/urunler/folyokesim/dijital-baski-makinesi-180-cm-genislik-yuksek-hiz-endustriyel-kalite/dijital-baski-makinesi-180-cm-genislik-yuksek-hiz-endustriyel-kalite-04-c54c90e7.jpg',
       '/urunler/folyokesim/dijital-baski-makinesi-180-cm-genislik-yuksek-hiz-endustriyel-kalite/dijital-baski-makinesi-180-cm-genislik-yuksek-hiz-endustriyel-kalite-03-9321c166.jpg',
     ],
   },
