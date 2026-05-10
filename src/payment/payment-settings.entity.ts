@@ -40,6 +40,32 @@ export class PaymentSettings {
     @Column({ type: 'boolean', default: false })
     ibanEftEnabled: boolean;
 
+    // QNBpay
+    @Column({ type: 'varchar', nullable: true })
+    qnbpayAppId: string | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    qnbpayAppSecret: string | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    qnbpayMerchantKey: string | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    qnbpayMerchantId: string | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    qnbpayBaseUrl: string | null;
+
+    @Column({ type: 'boolean', default: false })
+    qnbpayEnabled: boolean;
+
+    /** hosted_link | pay_smart_3d */
+    @Column({ type: 'varchar', nullable: true, default: 'hosted_link' })
+    qnbpayCheckoutMode: string | null;
+
+    @Column({ type: 'varchar', nullable: true })
+    qnbpaySaleWebhookKey: string | null;
+
     @CreateDateColumn()
     createdAt: Date;
 

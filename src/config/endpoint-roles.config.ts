@@ -160,9 +160,15 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'POST /payments/iban-eft/info': [], // Public - IBAN EFT bilgilerini getir
     'POST /payments/iyzico/callback': [], // Public - Iyzico callback (iyzico'dan gelir)
     'POST /payments/iyzico/webhook': [], // Public - Iyzico webhook (iyzico'dan gelir)
+    'GET /payments/qnbpay/return': [], // Public - QNBpay dönüş
+    'POST /payments/qnbpay/return': [],
+    'GET /payments/qnbpay/cancel': [],
+    'POST /payments/qnbpay/cancel': [],
+    'POST /payments/qnbpay/webhook': [],
 
     // Payment Settings Endpoints
-    'GET /payment-settings': [], // Public - Ödeme ayarlarını getir (hangi ödeme yöntemleri aktif)
+    'GET /payment-settings': [], // Public - Ödeme yöntemi bayrakları (sırlar dönmez)
+    'GET /payment-settings/admin': [Role.ADMIN], // Tam ayarlar (admin panel)
     'PATCH /payment-settings': [Role.ADMIN], // Sadece admin - Ödeme ayarlarını güncelle
 
     // Order Endpoints

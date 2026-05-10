@@ -447,6 +447,8 @@ export class OrderService {
   private async mapToResponseDto(order: Order): Promise<OrderResponseDto> {
     // Get payment provider from the most recent successful payment attempt
     let paymentProvider: PaymentProvider | null = null;
+    let paymentAttemptId: string | null = null;
+    let paymentProviderOrderRef: string | null = null;
     try {
       const paymentAttempt = await this.paymentAttemptRepository.findOne({
         where: {
@@ -457,6 +459,8 @@ export class OrderService {
       });
       if (paymentAttempt) {
         paymentProvider = paymentAttempt.provider;
+        paymentAttemptId = paymentAttempt.id;
+        paymentProviderOrderRef = paymentAttempt.providerPaymentId;
       }
     } catch (error) {
       this.logger.warn(`[mapToResponseDto] Failed to get payment provider for order ${order.id}: ${error}`);
@@ -489,6 +493,8 @@ export class OrderService {
       billingAddress: order.billingAddress,
       notes: order.notes,
       paymentProvider,
+      paymentAttemptId,
+      paymentProviderOrderRef,
       items: await Promise.all(
         (order.items || []).map(async (item) => {
           const itemDto: any = {

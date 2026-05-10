@@ -10,6 +10,8 @@ export interface NormalizedPaymentResult {
 
 export interface NormalizedWebhookResult {
   status: 'SUCCESS' | 'FAILURE' | 'PENDING';
+  /** Webhook sonrası deneme araması için (Iyzico conversationId, QNBpay invoice_id vb.) */
+  conversationId?: string;
   providerPaymentId?: string;
   paidPrice?: number;
   currency?: string;
@@ -21,9 +23,13 @@ export interface NormalizedWebhookResult {
 export interface InitializeCheckoutInput {
   orderId: string;
   conversationId: string;
+  /** QNBpay fatura numarası olarak kullanılan ödeme denemesi kimliği */
+  paymentAttemptId?: string;
   amount: number;
   currency: string;
   callbackUrl: string;
+  /** QNBpay iptal yönlendirmesi (hosted / 3D) */
+  cancelUrl?: string;
   webhookUrl?: string;
   buyerInfo: {
     id?: string;
@@ -51,6 +57,8 @@ export interface InitializeCheckoutInput {
     zipCode: string;
     address: string;
   };
+  /** paySmart3D için müşteri IP (yoksa sağlayıcı varsayılan kullanır). */
+  clientIp?: string;
   basketItems: Array<{
     id: string;
     name: string;
@@ -66,6 +74,11 @@ export interface PaymentProvider {
     token: string;
     redirectUrl: string;
     providerRef?: string;
+    /** paySmart3D vb. için tarayıcı form POST */
+    formAction?: string;
+    formMethod?: 'POST';
+    formFields?: Record<string, string>;
+    checkoutMode?: string;
   }>;
 
   retrieveCheckout(token: string, conversationId?: string): Promise<NormalizedPaymentResult>;

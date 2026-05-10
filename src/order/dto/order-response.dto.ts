@@ -87,6 +87,10 @@ export class OrderResponseDto {
   notes: string | null;
   items: OrderItemResponseDto[];
   paymentProvider: PaymentProvider | null; // Ödeme yöntemi
+  /** Başarılı kart ödemesinde deneme kaydı (QNBpay invoice_id ile aynı olabilir) */
+  paymentAttemptId?: string | null;
+  /** Sağlayıcıdaki işlem/order referansı */
+  paymentProviderOrderRef?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

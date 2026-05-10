@@ -278,7 +278,17 @@ export class IyzicoProvider implements PaymentProvider {
             // Iyzico webhook typically contains token, retrieve the payment
             if (payload.token) {
                 this.logger.debug(`[handleWebhook] Webhook contains token, retrieving checkout...`);
-                return this.retrieveCheckout(payload.token);
+                const r = await this.retrieveCheckout(payload.token);
+                return {
+                    status: r.status,
+                    conversationId: payload.conversationId,
+                    providerPaymentId: r.providerPaymentId,
+                    paidPrice: r.paidPrice,
+                    currency: r.currency,
+                    errorCode: r.errorCode,
+                    errorMessage: r.errorMessage,
+                    raw: r.raw,
+                };
             }
 
             // If webhook contains payment details directly
@@ -290,6 +300,7 @@ export class IyzicoProvider implements PaymentProvider {
 
             return {
                 status,
+                conversationId: payload.conversationId,
                 providerPaymentId: payload.paymentId,
                 paidPrice: payload.paidPrice ? parseFloat(payload.paidPrice) : undefined,
                 currency: payload.currency,

@@ -1,6 +1,7 @@
 import {
     Controller,
     Post,
+    All,
     Body,
     Req,
     Res,
@@ -20,13 +21,25 @@ export class PaymentController {
     constructor(private readonly paymentService: PaymentService) { }
 
     /**
+     * QNBpay dönüşünde query + body alanlarını birleştirir.
+     */
+    private mergeQnbPayParams(req: Request): Record<string, string | string[] | undefined> {
+        return { ...(req.query as Record<string, string | string[]>), ...(req.body || {}) };
+    }
+
+    /**
      * Start checkout process
      */
     @Post('checkout')
-    async checkout(@Body() checkoutDto: CheckoutDto): Promise<CheckoutResponseDto> {
+    async checkout(@Body() checkoutDto: CheckoutDto, @Req() req: Request): Promise<CheckoutResponseDto> {
         this.logger.log(`[checkout] POST /payments/checkout - orderId: ${checkoutDto.orderId}, provider: ${checkoutDto.provider || 'default'}`);
         try {
-            const result = await this.paymentService.createCheckout(checkoutDto);
+            const xf = req.headers['x-forwarded-for'];
+            const clientIp =
+                typeof xf === 'string'
+                    ? xf.split(',')[0].trim()
+                    : req.socket?.remoteAddress || undefined;
+            const result = await this.paymentService.createCheckout(checkoutDto, { clientIp });
             this.logger.log(`[checkout] Checkout successful - attemptId: ${result.attemptId}, redirectUrl: ${result.redirectUrl?.substring(0, 50)}...`);
             return result;
         } catch (error) {
@@ -72,6 +85,58 @@ export class PaymentController {
             const errorUrl = `${frontendFailUrl}?error=${encodeURIComponent(error.message || 'Payment processing failed')}`;
             this.logger.warn(`[iyzicoCallback] Redirecting to error page: ${errorUrl}`);
             res.redirect(HttpStatus.FOUND, errorUrl);
+        }
+    }
+
+    /**
+     * QNBpay başarılı dönüş (GET veya POST).
+     */
+    @All('qnbpay/return')
+    async qnbpayReturn(@Req() req: Request, @Res() res: Response): Promise<void> {
+        this.logger.log(`[qnbpayReturn] ${req.method} /payments/qnbpay/return`);
+        try {
+            const result = await this.paymentService.handleQnbPayReturn(this.mergeQnbPayParams(req));
+            res.redirect(HttpStatus.FOUND, result.redirectUrl);
+        } catch (error: any) {
+            this.logger.error(`[qnbpayReturn] ${error.message}`, error.stack);
+            const frontendFailUrl = process.env.FRONTEND_FAIL_URL || '';
+            res.redirect(
+                HttpStatus.FOUND,
+                `${frontendFailUrl}?error=${encodeURIComponent(error.message || 'Ödeme işlenemedi')}`,
+            );
+        }
+    }
+
+    /**
+     * QNBpay iptal dönüşü.
+     */
+    @All('qnbpay/cancel')
+    async qnbpayCancel(@Req() req: Request, @Res() res: Response): Promise<void> {
+        this.logger.log(`[qnbpayCancel] ${req.method} /payments/qnbpay/cancel`);
+        try {
+            const result = await this.paymentService.handleQnbPayCancel(this.mergeQnbPayParams(req));
+            res.redirect(HttpStatus.FOUND, result.redirectUrl);
+        } catch (error: any) {
+            const frontendFailUrl = process.env.FRONTEND_FAIL_URL || '';
+            res.redirect(
+                HttpStatus.FOUND,
+                `${frontendFailUrl}?error=${encodeURIComponent(error.message || 'İptal')}`,
+            );
+        }
+    }
+
+    /**
+     * QNBpay satış webhook.
+     */
+    @Post('qnbpay/webhook')
+    async qnbpayWebhook(@Req() req: Request, @Res() res: Response): Promise<void> {
+        this.logger.log(`[qnbpayWebhook] POST /payments/qnbpay/webhook`);
+        try {
+            await this.paymentService.handleWebhook(req.body, PaymentProvider.QNBPAY);
+            res.status(HttpStatus.OK).send('OK');
+        } catch (error: any) {
+            this.logger.error(`[qnbpayWebhook] ${error.message}`, error.stack);
+            res.status(HttpStatus.OK).send('OK');
         }
     }
 

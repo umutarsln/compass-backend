@@ -13,21 +13,36 @@ import {
 } from '@nestjs/swagger';
 import { PaymentSettingsService } from './payment-settings.service';
 import { PaymentSettings } from './payment-settings.entity';
+import { PaymentSettingsPublicDto } from './dto/payment-settings-public.dto';
 
 @ApiTags('Payment Settings')
 @Controller('payment-settings')
-@ApiBearerAuth()
 export class PaymentSettingsController {
     constructor(private readonly paymentSettingsService: PaymentSettingsService) { }
 
     @Get()
     @ApiOperation({
-        summary: 'Ödeme ayarlarını getir',
-        description: 'Iyzico ve IBAN EFT ödeme ayarlarını döndürür. Sadece admin kullanıcılar erişebilir.'
+        summary: 'Public ödeme bayrakları',
+        description: 'Hangi ödeme yöntemleri açık; API anahtarları ve sırlar dönmez.',
     })
     @ApiResponse({
         status: 200,
-        description: 'Ödeme ayarları başarıyla döndürüldü',
+        description: 'Özet ayarlar',
+        type: PaymentSettingsPublicDto,
+    })
+    async getPublicSettings(): Promise<PaymentSettingsPublicDto> {
+        return await this.paymentSettingsService.getPublicPaymentSettings();
+    }
+
+    @Get('admin')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Admin: tam ödeme ayarları',
+        description: 'Iyzico, IBAN ve QNBpay alanları dahil tüm kayıt (yalnızca ADMIN).',
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Ödeme ayarları',
         type: PaymentSettings,
     })
     @ApiResponse({
@@ -38,11 +53,12 @@ export class PaymentSettingsController {
         status: 403,
         description: 'Forbidden - Bu işlem için yetkiniz yok',
     })
-    async getSettings(): Promise<PaymentSettings> {
+    async getAdminSettings(): Promise<PaymentSettings> {
         return await this.paymentSettingsService.getSettings();
     }
 
     @Patch()
+    @ApiBearerAuth()
     @ApiOperation({
         summary: 'Ödeme ayarlarını güncelle',
         description: 'Iyzico ve IBAN EFT ödeme ayarlarını günceller. Sadece admin kullanıcılar erişebilir.'

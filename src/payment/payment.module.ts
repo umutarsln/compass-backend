@@ -8,6 +8,7 @@ import { PaymentController } from './payment.controller';
 import { PaymentSettingsController } from './payment-settings.controller';
 import { IyzicoProvider } from './providers/iyzico/iyzico.provider';
 import { IbanEftProvider } from './providers/iban-eft/iban-eft.provider';
+import { QnbpayProvider } from './providers/qnbpay/qnbpay.provider';
 import { OrderModule } from '../order/order.module';
 import { Order } from '../order/order.entity';
 import { CartModule } from '../cart/cart.module';
@@ -23,7 +24,7 @@ import { MailModule } from '../mail/mail.module';
         MailModule,
     ],
     controllers: [PaymentController, PaymentSettingsController],
-    providers: [PaymentService, PaymentSettingsService, IyzicoProvider, IbanEftProvider],
+    providers: [PaymentService, PaymentSettingsService, IyzicoProvider, IbanEftProvider, QnbpayProvider],
     exports: [PaymentService, PaymentSettingsService],
 })
 export class PaymentModule { }

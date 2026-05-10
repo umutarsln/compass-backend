@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PaymentSettings } from './payment-settings.entity';
+import { PaymentSettingsPublicDto } from './dto/payment-settings-public.dto';
 
 @Injectable()
 export class PaymentSettingsService {
@@ -12,6 +13,31 @@ export class PaymentSettingsService {
         @InjectRepository(PaymentSettings)
         private paymentSettingsRepository: Repository<PaymentSettings>,
     ) {}
+
+    /**
+     * QNB merchant id için maske (public API).
+     */
+    private maskMerchantId(id: string | null | undefined): string | null {
+        if (!id || String(id).length < 4) {
+            return null;
+        }
+        const s = String(id);
+        return `***${s.slice(-4)}`;
+    }
+
+    /**
+     * Mağaza için sırları içermeyen ödeme ayarı özeti.
+     */
+    async getPublicPaymentSettings(): Promise<PaymentSettingsPublicDto> {
+        const s = await this.getSettings();
+        return {
+            iyzicoEnabled: s.iyzicoEnabled,
+            ibanEftEnabled: s.ibanEftEnabled,
+            qnbpayEnabled: s.qnbpayEnabled,
+            qnbpayCheckoutMode: s.qnbpayCheckoutMode || 'hosted_link',
+            qnbpayMerchantIdMasked: this.maskMerchantId(s.qnbpayMerchantId),
+        };
+    }
 
     /**
      * Get payment settings (singleton - only one settings record)

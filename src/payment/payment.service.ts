@@ -5,7 +5,7 @@ import {
     Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { PaymentAttempt } from './payment-attempt.entity';
 import { PaymentProvider } from '../common/enums/payment-provider.enum';
@@ -15,9 +15,13 @@ import { Order } from '../order/order.entity';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { CheckoutDto } from './dto/checkout.dto';
 import { CheckoutResponseDto } from './dto/checkout-response.dto';
-import { PaymentProvider as PaymentProviderInterface } from './providers/payment-provider.interface';
+import {
+    PaymentProvider as PaymentProviderInterface,
+    NormalizedPaymentResult,
+} from './providers/payment-provider.interface';
 import { IyzicoProvider } from './providers/iyzico/iyzico.provider';
 import { IbanEftProvider } from './providers/iban-eft/iban-eft.provider';
+import { QnbpayProvider } from './providers/qnbpay/qnbpay.provider';
 import { PaymentSettingsService } from './payment-settings.service';
 import { CartService } from '../cart/cart.service';
 import { CouponService } from '../coupon/coupon.service';
@@ -42,12 +46,14 @@ export class PaymentService {
         private paymentSettingsService: PaymentSettingsService,
         private iyzicoProvider: IyzicoProvider,
         private ibanEftProvider: IbanEftProvider,
+        private qnbpayProvider: QnbpayProvider,
     ) {
         // Register providers
         this.providers = new Map();
         this.providers.set(PaymentProvider.IYZICO, iyzicoProvider);
         this.providers.set(PaymentProvider.IBAN_EFT, ibanEftProvider);
-        this.logger.log('PaymentService initialized with providers: IYZICO, IBAN_EFT');
+        this.providers.set(PaymentProvider.QNBPAY, qnbpayProvider);
+        this.logger.log('PaymentService initialized with providers: IYZICO, IBAN_EFT, QNBPAY');
 
         // Initialize providers with settings
         this.initializeProviders();
@@ -68,6 +74,10 @@ export class PaymentService {
             // IBAN EFT provider'a settings'i set et
             if (this.ibanEftProvider && typeof (this.ibanEftProvider as any).setSettings === 'function') {
                 (this.ibanEftProvider as any).setSettings(settings);
+            }
+
+            if (this.qnbpayProvider && typeof (this.qnbpayProvider as any).setSettings === 'function') {
+                (this.qnbpayProvider as any).setSettings(settings);
             }
 
             this.logger.log('[initializeProviders] Providers initialized with settings');
@@ -100,7 +110,10 @@ export class PaymentService {
     /**
      * Create checkout and initialize payment
      */
-    async createCheckout(checkoutDto: CheckoutDto): Promise<CheckoutResponseDto> {
+    async createCheckout(
+        checkoutDto: CheckoutDto,
+        options?: { clientIp?: string },
+    ): Promise<CheckoutResponseDto> {
         this.logger.log(`[createCheckout] Starting checkout process for orderId: ${checkoutDto.orderId}`);
         this.logger.debug(`[createCheckout] Checkout DTO: ${JSON.stringify(checkoutDto)}`);
 
@@ -206,6 +219,15 @@ export class PaymentService {
                 if (this.ibanEftProvider && typeof (this.ibanEftProvider as any).setSettings === 'function') {
                     (this.ibanEftProvider as any).setSettings(settings);
                 }
+            } else if (provider === PaymentProvider.QNBPAY) {
+                if (this.qnbpayProvider && typeof (this.qnbpayProvider as any).setSettings === 'function') {
+                    (this.qnbpayProvider as any).setSettings(settings);
+                }
+            }
+
+            if (provider === PaymentProvider.QNBPAY && !settings.qnbpayEnabled) {
+                this.logger.warn(`[createCheckout] QNBpay kapalı, sipariş: ${checkoutDto.orderId}`);
+                throw new BadRequestException('QNBpay ödeme yöntemi şu an kullanılamıyor');
             }
 
             const providerInstance = this.getProvider(provider);
@@ -286,18 +308,45 @@ export class PaymentService {
 
             this.logger.debug(`[createCheckout] Buyer info prepared: ${JSON.stringify({ ...buyerInfo, email: '***', phone: '***' })}`);
 
-            // Get callback URLs
-            const appPublicUrl = this.configService.get<string>('APP_PUBLIC_URL');
-            const callbackPath =
-                this.configService.get<string>('IYZICO_PAYMENT_CALLBACK_PATH') ||
-                '/payments/iyzico/callback';
-            const webhookPath =
-                this.configService.get<string>('IYZICO_PAYMENT_WEBHOOK_PATH') ||
-                '/payments/iyzico/webhook';
-            const callbackUrl = `${appPublicUrl}${callbackPath}`;
-            const webhookUrl = `${appPublicUrl}${webhookPath}`;
+            // Get callback URLs (sağlayıcıya göre)
+            const appPublicUrl = this.configService.get<string>('APP_PUBLIC_URL') || '';
+            let callbackUrl = '';
+            let webhookUrl = '';
+            let cancelUrl: string | undefined;
 
-            this.logger.debug(`[createCheckout] Callback URLs: callbackUrl=${callbackUrl}, webhookUrl=${webhookUrl}`);
+            if (provider === PaymentProvider.IYZICO) {
+                const callbackPath =
+                    this.configService.get<string>('IYZICO_PAYMENT_CALLBACK_PATH') ||
+                    '/payments/iyzico/callback';
+                const webhookPath =
+                    this.configService.get<string>('IYZICO_PAYMENT_WEBHOOK_PATH') ||
+                    '/payments/iyzico/webhook';
+                callbackUrl = `${appPublicUrl}${callbackPath}`;
+                webhookUrl = `${appPublicUrl}${webhookPath}`;
+            } else if (provider === PaymentProvider.QNBPAY) {
+                const returnPath =
+                    this.configService.get<string>('QNBPAY_RETURN_PATH') || '/payments/qnbpay/return';
+                const cancelPath =
+                    this.configService.get<string>('QNBPAY_CANCEL_PATH') || '/payments/qnbpay/cancel';
+                const webhookPath =
+                    this.configService.get<string>('QNBPAY_WEBHOOK_PATH') || '/payments/qnbpay/webhook';
+                callbackUrl = `${appPublicUrl}${returnPath}`;
+                cancelUrl = `${appPublicUrl}${cancelPath}`;
+                webhookUrl = `${appPublicUrl}${webhookPath}`;
+            } else {
+                const callbackPath =
+                    this.configService.get<string>('IYZICO_PAYMENT_CALLBACK_PATH') ||
+                    '/payments/iyzico/callback';
+                const webhookPath =
+                    this.configService.get<string>('IYZICO_PAYMENT_WEBHOOK_PATH') ||
+                    '/payments/iyzico/webhook';
+                callbackUrl = `${appPublicUrl}${callbackPath}`;
+                webhookUrl = `${appPublicUrl}${webhookPath}`;
+            }
+
+            this.logger.debug(
+                `[createCheckout] Callback URLs: callbackUrl=${callbackUrl}, webhookUrl=${webhookUrl}, cancelUrl=${cancelUrl || 'n/a'}`,
+            );
 
             // Initialize checkout
             // Convert Decimal values to numbers
@@ -400,10 +449,13 @@ export class PaymentService {
             const result = await providerInstance.initializeCheckout({
                 orderId: checkoutDto.orderId,
                 conversationId,
+                paymentAttemptId: provider === PaymentProvider.QNBPAY ? attempt.id : undefined,
                 amount: totalAmount,
                 currency: orderEntity.currency,
                 callbackUrl,
+                cancelUrl,
                 webhookUrl,
+                clientIp: options?.clientIp,
                 buyerInfo,
                 shippingAddress: {
                     contactName: `${buyerInfo.name} ${buyerInfo.surname}`,
@@ -433,11 +485,15 @@ export class PaymentService {
             await this.paymentAttemptRepository.save(attempt);
             this.logger.log(`[createCheckout] Payment attempt ${attempt.id} updated with token and redirect URL`);
 
-            const response = {
+            const response: CheckoutResponseDto = {
                 attemptId: attempt.id,
                 provider,
-                redirectUrl: result.redirectUrl,
+                redirectUrl: result.redirectUrl || '',
                 token: result.token,
+                formAction: result.formAction,
+                formMethod: result.formMethod,
+                formFields: result.formFields,
+                checkoutMode: result.checkoutMode,
             };
 
             this.logger.log(`[createCheckout] Checkout completed successfully for order ${checkoutDto.orderId}. Attempt ID: ${attempt?.id || 'N/A'}`);
@@ -457,6 +513,275 @@ export class PaymentService {
     }
 
     /**
+     * UUID biçiminde mi kontrol eder (QNBpay invoice_id = deneme id).
+     */
+    private isUuidShape(value: string): boolean {
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+    }
+
+    /**
+     * Ödeme denemesi kaydedildikten sonra sipariş, sepet ve e-posta yan etkilerini çalıştırır.
+     */
+    private async runPostPaymentSideEffectsAfterSavedAttempt(
+        attempt: PaymentAttempt,
+        result: NormalizedPaymentResult,
+        logCtx: string,
+    ): Promise<{ success: boolean; orderId: string; redirectUrl: string }> {
+        const order = await this.orderRepository.findOne({
+            where: { id: attempt.orderId },
+            relations: [
+                'user',
+                'items',
+                'items.product',
+                'items.product.galleries',
+                'items.product.galleries.mainImage',
+                'items.product.galleries.thumbnailImage',
+                'items.variant',
+                'items.variant.galleries',
+                'items.variant.galleries.mainImage',
+                'items.variant.galleries.thumbnailImage',
+                'items.variant.variantValues',
+                'items.variant.variantValues.variantOption',
+            ],
+        });
+
+        if (!order) {
+            this.logger.error(`${logCtx} Order not found: ${attempt.orderId}`);
+            throw new NotFoundException('Order not found');
+        }
+
+        if (result.status === 'SUCCESS') {
+            this.logger.log(`${logCtx} Marking order ${attempt.orderId} as paid...`);
+            await this.orderService.markOrderAsPaid(
+                attempt.orderId,
+                result.providerPaymentId || '',
+                attempt.id,
+            );
+            this.logger.log(`${logCtx} Order ${attempt.orderId} marked as paid successfully`);
+
+            if (order.couponId) {
+                try {
+                    await this.couponService.incrementUsage(order.couponId);
+                    this.logger.log(`${logCtx} Coupon ${order.couponId} usage incremented`);
+                } catch (error: any) {
+                    this.logger.error(`${logCtx} Failed to increment coupon usage: ${error.message}`, error.stack);
+                }
+            }
+
+            if (order.cartId) {
+                this.logger.log(`${logCtx} Clearing cart ${order.cartId} after successful payment...`);
+                try {
+                    await this.cartService.clearCart(order.cartId);
+                    this.logger.log(`${logCtx} Cart ${order.cartId} cleared successfully`);
+                } catch (error: any) {
+                    this.logger.error(`${logCtx} Failed to clear cart ${order.cartId}: ${error.message}`, error.stack);
+                }
+            }
+
+            try {
+                this.logger.log(`${logCtx} Preparing to send success email for order ${order.orderNo}...`);
+                const itemsWithImages: OrderItemWithImage[] = order.items.map((item) => {
+                    let imageUrl: string | null = null;
+                    let imageAlt: string = item.productName;
+
+                    if (item.variant && item.variant.galleries && item.variant.galleries.length > 0) {
+                        const gallery = item.variant.galleries[0];
+                        imageUrl = gallery.thumbnailImage?.s3Url || gallery.mainImage?.s3Url || null;
+                    } else if (item.product && item.product.galleries && item.product.galleries.length > 0) {
+                        const gallery = item.product.galleries[0];
+                        imageUrl = gallery.thumbnailImage?.s3Url || gallery.mainImage?.s3Url || null;
+                    }
+
+                    const variantValues =
+                        item.variant && item.variant.variantValues
+                            ? item.variant.variantValues.map((vv) => ({
+                                value: vv.value,
+                                variantOption: vv.variantOption
+                                    ? {
+                                        name: vv.variantOption.name,
+                                        type: vv.variantOption.type as 'COLOR' | 'TEXT',
+                                    }
+                                    : null,
+                                colorCode: vv.colorCode || null,
+                            }))
+                            : undefined;
+
+                    return {
+                        id: item.id,
+                        productName: item.productName,
+                        quantity: item.quantity,
+                        unitPrice: Number(item.unitPrice),
+                        discountedPrice: item.discountedPrice ? Number(item.discountedPrice) : null,
+                        totalPrice: Number(item.totalPrice),
+                        currency: item.currency,
+                        image: imageUrl
+                            ? {
+                                url: imageUrl,
+                                alt: imageAlt,
+                            }
+                            : null,
+                        variantValues,
+                    };
+                });
+
+                await this.mailService.sendOrderSuccessEmail(order, itemsWithImages);
+                this.logger.log(`${logCtx} Success email sent successfully for order ${order.orderNo}`);
+            } catch (error: any) {
+                this.logger.error(`${logCtx} Failed to send success email for order ${order.orderNo}: ${error.message}`, error.stack);
+            }
+        } else {
+            if (order.cartId) {
+                this.logger.log(`${logCtx} Reactivating cart ${order.cartId} after payment failure...`);
+                try {
+                    await this.cartService.reactivateCart(order.cartId);
+                    this.logger.log(`${logCtx} Cart ${order.cartId} reactivated successfully`);
+                } catch (error: any) {
+                    this.logger.error(`${logCtx} Failed to reactivate cart ${order.cartId}: ${error.message}`, error.stack);
+                }
+            }
+
+            try {
+                await this.mailService.sendOrderFailedEmail(order, result.errorMessage || null);
+                this.logger.log(`${logCtx} Failed email sent for order ${order.orderNo}`);
+            } catch (error: any) {
+                this.logger.error(`${logCtx} Failed to send failed email: ${error.message}`, error.stack);
+            }
+        }
+
+        const frontendSuccessUrl = this.configService.get<string>('FRONTEND_SUCCESS_URL') || '';
+        const frontendFailUrl = this.configService.get<string>('FRONTEND_FAIL_URL') || '';
+
+        if (result.status === 'SUCCESS') {
+            const redirectUrl = `${frontendSuccessUrl}?orderId=${attempt.orderId}`;
+            this.logger.log(`${logCtx} Callback processed successfully. Redirecting to: ${redirectUrl}`);
+            return {
+                success: true,
+                orderId: attempt.orderId,
+                redirectUrl,
+            };
+        }
+        const redirectUrl = `${frontendFailUrl}?orderId=${attempt.orderId}&error=${encodeURIComponent(result.errorMessage || 'Payment failed')}`;
+        this.logger.warn(`${logCtx} Callback processed with failure. Redirecting to: ${redirectUrl}`);
+        return {
+            success: false,
+            orderId: attempt.orderId,
+            redirectUrl,
+        };
+    }
+
+    /**
+     * QNBpay dönüş URL’si: hash doğrulama + checkstatus + sipariş tamamlama.
+     */
+    async handleQnbPayReturn(
+        merged: Record<string, string | string[] | undefined>,
+    ): Promise<{ success: boolean; orderId: string; redirectUrl: string }> {
+        const pick = (k: string): string | undefined => {
+            const v = merged[k];
+            if (Array.isArray(v)) {
+                return v[0];
+            }
+            return v as string | undefined;
+        };
+        const invoiceId = pick('invoice_id') || pick('invoiceId');
+        if (!invoiceId) {
+            throw new BadRequestException('invoice_id gerekli');
+        }
+
+        const attempt = await this.paymentAttemptRepository.findOne({
+            where: { id: invoiceId, provider: PaymentProvider.QNBPAY },
+            relations: ['order'],
+        });
+
+        if (!attempt) {
+            throw new NotFoundException('Ödeme denemesi bulunamadı');
+        }
+
+        if (attempt.status === PaymentStatus.SUCCESS) {
+            const frontendSuccessUrl = this.configService.get<string>('FRONTEND_SUCCESS_URL') || '';
+            return {
+                success: true,
+                orderId: attempt.orderId,
+                redirectUrl: `${frontendSuccessUrl}?orderId=${attempt.orderId}`,
+            };
+        }
+
+        const orderRow = await this.orderRepository.findOne({ where: { id: attempt.orderId } });
+        if (!orderRow) {
+            throw new NotFoundException('Sipariş bulunamadı');
+        }
+
+        const settings = await this.paymentSettingsService.getSettings();
+        this.qnbpayProvider.setSettings(settings);
+
+        const total =
+            typeof orderRow.total === 'string' ? parseFloat(orderRow.total) : Number(orderRow.total);
+        const result = await this.qnbpayProvider.finalizeReturnQuery({
+            query: merged,
+            expectedInvoiceId: attempt.id,
+            expectedTotal: total,
+            expectedCurrency: orderRow.currency,
+        });
+
+        const previousStatus = attempt.status;
+        attempt.status =
+            result.status === 'SUCCESS'
+                ? PaymentStatus.SUCCESS
+                : result.status === 'FAILURE'
+                    ? PaymentStatus.FAILURE
+                    : PaymentStatus.INITIATED;
+        attempt.providerPaymentId = result.providerPaymentId ?? attempt.providerPaymentId;
+        attempt.errorCode = result.errorCode ?? null;
+        attempt.errorMessage = result.errorMessage ?? null;
+        attempt.rawProviderResponse = result.raw;
+        await this.paymentAttemptRepository.save(attempt);
+        this.logger.log(
+            `[handleQnbPayReturn] Attempt ${attempt.id} status ${previousStatus} -> ${attempt.status}`,
+        );
+
+        return this.runPostPaymentSideEffectsAfterSavedAttempt(attempt, result, '[handleQnbPayReturn]');
+    }
+
+    /**
+     * QNBpay iptal yönlendirmesi: denemeyi başarısız işaretler ve mağaza hata sayfasına yönlendirir.
+     */
+    async handleQnbPayCancel(
+        merged: Record<string, string | string[] | undefined>,
+    ): Promise<{ success: boolean; orderId: string; redirectUrl: string }> {
+        const pick = (k: string): string | undefined => {
+            const v = merged[k];
+            if (Array.isArray(v)) {
+                return v[0];
+            }
+            return v as string | undefined;
+        };
+        const invoiceId = pick('invoice_id') || pick('invoiceId');
+        const frontendFailUrl = this.configService.get<string>('FRONTEND_FAIL_URL') || '';
+
+        if (!invoiceId) {
+            return {
+                success: false,
+                orderId: '',
+                redirectUrl: `${frontendFailUrl}?error=${encodeURIComponent('Ödeme iptal')}`,
+            };
+        }
+
+        const attempt = await this.paymentAttemptRepository.findOne({
+            where: { id: invoiceId, provider: PaymentProvider.QNBPAY },
+        });
+        if (attempt && attempt.status !== PaymentStatus.SUCCESS) {
+            attempt.status = PaymentStatus.FAILURE;
+            attempt.errorMessage = attempt.errorMessage || 'Kullanıcı iptal / QNBpay cancel_url';
+            await this.paymentAttemptRepository.save(attempt);
+        }
+
+        const orderId = attempt?.orderId || '';
+        const redirectUrl = orderId
+            ? `${frontendFailUrl}?orderId=${orderId}&error=${encodeURIComponent('Ödeme iptal edildi')}`
+            : `${frontendFailUrl}?error=${encodeURIComponent('Ödeme iptal edildi')}`;
+        return { success: false, orderId, redirectUrl };
+    }
+
+    /**
      * Handle payment callback
      */
     async handleCallback(
@@ -466,12 +791,27 @@ export class PaymentService {
         this.logger.log(`[handleCallback] Processing callback for token: ${token?.substring(0, 20)}..., provider: ${provider}`);
 
         try {
-            // Find attempt by token
-            this.logger.debug(`[handleCallback] Searching for payment attempt with token...`);
-            const attempt = await this.paymentAttemptRepository.findOne({
-                where: { token, provider },
-                relations: ['order'],
-            });
+            const settingsCb = await this.paymentSettingsService.getSettings();
+            if (this.iyzicoProvider && typeof (this.iyzicoProvider as any).setSettings === 'function') {
+                (this.iyzicoProvider as any).setSettings(settingsCb);
+            }
+            if (this.qnbpayProvider && typeof (this.qnbpayProvider as any).setSettings === 'function') {
+                (this.qnbpayProvider as any).setSettings(settingsCb);
+            }
+
+            let attempt: PaymentAttempt | null = null;
+            if (provider === PaymentProvider.QNBPAY && this.isUuidShape(token)) {
+                attempt = await this.paymentAttemptRepository.findOne({
+                    where: { id: token, provider },
+                    relations: ['order'],
+                });
+            }
+            if (!attempt) {
+                attempt = await this.paymentAttemptRepository.findOne({
+                    where: { token, provider },
+                    relations: ['order'],
+                });
+            }
 
             if (!attempt) {
                 this.logger.error(`[handleCallback] Payment attempt not found for token: ${token?.substring(0, 20)}...`);
@@ -480,7 +820,6 @@ export class PaymentService {
 
             this.logger.debug(`[handleCallback] Payment attempt found: ${attempt.id}, orderId: ${attempt.orderId}, current status: ${attempt.status}`);
 
-            // If already processed, return existing result
             if (attempt.status === PaymentStatus.SUCCESS) {
                 this.logger.log(`[handleCallback] Payment attempt ${attempt.id} already processed successfully`);
                 const frontendSuccessUrl = this.configService.get<string>('FRONTEND_SUCCESS_URL') || '';
@@ -491,13 +830,17 @@ export class PaymentService {
                 };
             }
 
-            // Retrieve payment status from provider
+            if (provider === PaymentProvider.QNBPAY) {
+                this.logger.warn(
+                    '[handleCallback] QNBpay için doğrudan callback yerine /payments/qnbpay/return kullanılmalı; checkstatus ile sınırlı doğrulama yapılıyor.',
+                );
+            }
+
             this.logger.log(`[handleCallback] Retrieving payment status from provider ${provider}...`);
             const providerInstance = this.getProvider(provider);
             const result = await providerInstance.retrieveCheckout(token, attempt.conversationId);
             this.logger.log(`[handleCallback] Provider returned status: ${result.status}, paymentId: ${result.providerPaymentId || 'N/A'}`);
 
-            // Update attempt
             const previousStatus = attempt.status;
             attempt.status =
                 result.status === 'SUCCESS'
@@ -512,171 +855,8 @@ export class PaymentService {
             await this.paymentAttemptRepository.save(attempt);
             this.logger.log(`[handleCallback] Payment attempt ${attempt.id} status updated from ${previousStatus} to ${attempt.status}`);
 
-            // Get order with all relations for email
-            const order = await this.orderRepository.findOne({
-                where: { id: attempt.orderId },
-                relations: [
-                    'user',
-                    'items',
-                    'items.product',
-                    'items.product.galleries',
-                    'items.product.galleries.mainImage',
-                    'items.product.galleries.thumbnailImage',
-                    'items.variant',
-                    'items.variant.galleries',
-                    'items.variant.galleries.mainImage',
-                    'items.variant.galleries.thumbnailImage',
-                    'items.variant.variantValues',
-                    'items.variant.variantValues.variantOption',
-                ],
-            });
-
-            if (!order) {
-                this.logger.error(`[handleCallback] Order not found: ${attempt.orderId}`);
-                throw new NotFoundException('Order not found');
-            }
-
-            // If successful, mark order as paid and clear cart
-            if (result.status === 'SUCCESS') {
-                this.logger.log(`[handleCallback] Marking order ${attempt.orderId} as paid...`);
-                await this.orderService.markOrderAsPaid(
-                    attempt.orderId,
-                    result.providerPaymentId || '',
-                    attempt.id,
-                );
-                this.logger.log(`[handleCallback] Order ${attempt.orderId} marked as paid successfully`);
-
-                // Increment coupon usage count if order used a coupon
-                if (order.couponId) {
-                    try {
-                        await this.couponService.incrementUsage(order.couponId);
-                        this.logger.log(`[handleCallback] Coupon ${order.couponId} usage incremented`);
-                    } catch (error) {
-                        this.logger.error(`[handleCallback] Failed to increment coupon usage: ${error.message}`, error.stack);
-                        // Don't throw, just log
-                    }
-                }
-
-                // Clear cart after successful payment
-                if (order.cartId) {
-                    this.logger.log(`[handleCallback] Clearing cart ${order.cartId} after successful payment...`);
-                    try {
-                        await this.cartService.clearCart(order.cartId);
-                        this.logger.log(`[handleCallback] Cart ${order.cartId} cleared successfully`);
-                    } catch (error) {
-                        this.logger.error(`[handleCallback] Failed to clear cart ${order.cartId}: ${error.message}`, error.stack);
-                        // Don't throw, just log the error
-                    }
-                }
-
-                // Send success email
-                try {
-                    this.logger.log(`[handleCallback] Preparing to send success email for order ${order.orderNo}...`);
-                    this.logger.debug(`[handleCallback] Order userId: ${order.userId}, user: ${order.user ? 'loaded' : 'not loaded'}, guestEmail: ${order.guestEmail || 'null'}`);
-
-                    if (order.user) {
-                        this.logger.debug(`[handleCallback] User email: ${order.user.email || 'null'}`);
-                    }
-
-                    const itemsWithImages: OrderItemWithImage[] = order.items.map((item) => {
-                        // Get product image from gallery
-                        let imageUrl: string | null = null;
-                        let imageAlt: string = item.productName;
-
-                        if (item.variant && item.variant.galleries && item.variant.galleries.length > 0) {
-                            const gallery = item.variant.galleries[0];
-                            imageUrl = gallery.thumbnailImage?.s3Url || gallery.mainImage?.s3Url || null;
-                        } else if (item.product && item.product.galleries && item.product.galleries.length > 0) {
-                            const gallery = item.product.galleries[0];
-                            imageUrl = gallery.thumbnailImage?.s3Url || gallery.mainImage?.s3Url || null;
-                        }
-
-                        // Get variant values
-                        const variantValues =
-                            item.variant && item.variant.variantValues
-                                ? item.variant.variantValues.map((vv) => ({
-                                    value: vv.value,
-                                    variantOption: vv.variantOption
-                                        ? {
-                                            name: vv.variantOption.name,
-                                            type: vv.variantOption.type as 'COLOR' | 'TEXT',
-                                        }
-                                        : null,
-                                    colorCode: vv.colorCode || null,
-                                }))
-                                : undefined;
-
-                        return {
-                            id: item.id,
-                            productName: item.productName,
-                            quantity: item.quantity,
-                            unitPrice: Number(item.unitPrice),
-                            discountedPrice: item.discountedPrice ? Number(item.discountedPrice) : null,
-                            totalPrice: Number(item.totalPrice),
-                            currency: item.currency,
-                            image: imageUrl
-                                ? {
-                                    url: imageUrl,
-                                    alt: imageAlt,
-                                }
-                                : null,
-                            variantValues,
-                        };
-                    });
-
-                    this.logger.log(`[handleCallback] Calling mailService.sendOrderSuccessEmail for order ${order.orderNo}...`);
-                    await this.mailService.sendOrderSuccessEmail(order, itemsWithImages);
-                    this.logger.log(`[handleCallback] Success email sent successfully for order ${order.orderNo}`);
-                } catch (error) {
-                    this.logger.error(`[handleCallback] Failed to send success email for order ${order.orderNo}: ${error.message}`, error.stack);
-                    this.logger.error(`[handleCallback] Error details: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
-                    // Don't throw, just log the error
-                }
-            } else {
-                // If payment failed, reactivate cart
-                if (order.cartId) {
-                    this.logger.log(`[handleCallback] Reactivating cart ${order.cartId} after payment failure...`);
-                    try {
-                        await this.cartService.reactivateCart(order.cartId);
-                        this.logger.log(`[handleCallback] Cart ${order.cartId} reactivated successfully`);
-                    } catch (error) {
-                        this.logger.error(`[handleCallback] Failed to reactivate cart ${order.cartId}: ${error.message}`, error.stack);
-                        // Don't throw, just log the error
-                    }
-                }
-
-                // Send failed email
-                try {
-                    await this.mailService.sendOrderFailedEmail(order, result.errorMessage || null);
-                    this.logger.log(`[handleCallback] Failed email sent for order ${order.orderNo}`);
-                } catch (error) {
-                    this.logger.error(`[handleCallback] Failed to send failed email: ${error.message}`, error.stack);
-                    // Don't throw, just log the error
-                }
-            }
-
-            // Get redirect URLs
-            const frontendSuccessUrl = this.configService.get<string>('FRONTEND_SUCCESS_URL') || '';
-            const frontendFailUrl = this.configService.get<string>('FRONTEND_FAIL_URL') || '';
-
-            if (result.status === 'SUCCESS') {
-                const redirectUrl = `${frontendSuccessUrl}?orderId=${attempt.orderId}`;
-                this.logger.log(`[handleCallback] Callback processed successfully. Redirecting to: ${redirectUrl}`);
-                return {
-                    success: true,
-                    orderId: attempt.orderId,
-                    redirectUrl,
-                };
-            } else {
-                const redirectUrl = `${frontendFailUrl}?orderId=${attempt.orderId}&error=${encodeURIComponent(result.errorMessage || 'Payment failed')}`;
-                this.logger.warn(`[handleCallback] Callback processed with failure. Error: ${result.errorMessage}, Redirecting to: ${redirectUrl}`);
-                return {
-                    success: false,
-                    orderId: attempt.orderId,
-                    redirectUrl,
-                };
-            }
-        } catch (error) {
+            return this.runPostPaymentSideEffectsAfterSavedAttempt(attempt, result, '[handleCallback]');
+        } catch (error: any) {
             this.logger.error(`[handleCallback] Error processing callback for token ${token?.substring(0, 20)}...: ${error.message}`, error.stack);
             throw error;
         }
@@ -693,22 +873,45 @@ export class PaymentService {
         this.logger.debug(`[handleWebhook] Webhook payload: ${JSON.stringify(payload)}`);
 
         try {
+            const settings = await this.paymentSettingsService.getSettings();
+            if (this.iyzicoProvider && typeof (this.iyzicoProvider as any).setSettings === 'function') {
+                (this.iyzicoProvider as any).setSettings(settings);
+            }
+            if (this.qnbpayProvider && typeof (this.qnbpayProvider as any).setSettings === 'function') {
+                (this.qnbpayProvider as any).setSettings(settings);
+            }
+
             const providerInstance = this.getProvider(provider);
             this.logger.debug(`[handleWebhook] Calling provider.handleWebhook...`);
             const result = await providerInstance.handleWebhook(payload);
             this.logger.log(`[handleWebhook] Provider returned status: ${result.status}, paymentId: ${result.providerPaymentId || 'N/A'}`);
 
-            // Find attempt by conversationId or paymentId
-            this.logger.debug(`[handleWebhook] Searching for payment attempt with conversationId: ${payload.conversationId} or paymentId: ${result.providerPaymentId}`);
-            const attempt = await this.paymentAttemptRepository.findOne({
-                where: [
-                    { conversationId: payload.conversationId },
-                    { providerPaymentId: result.providerPaymentId },
-                ],
-            });
+            const where: FindOptionsWhere<PaymentAttempt>[] = [];
+            if (result.providerPaymentId) {
+                where.push({ providerPaymentId: result.providerPaymentId, provider });
+            }
+            if (payload?.conversationId) {
+                where.push({ conversationId: payload.conversationId, provider });
+            }
+            if (result.conversationId) {
+                where.push({ conversationId: result.conversationId, provider });
+                if (this.isUuidShape(result.conversationId)) {
+                    where.push({ id: result.conversationId, provider });
+                }
+            }
+
+            this.logger.debug(
+                `[handleWebhook] Searching payment attempt, ${where.length} eşleşme kriteri`,
+            );
+            const attempt =
+                where.length > 0
+                    ? await this.paymentAttemptRepository.findOne({ where })
+                    : null;
 
             if (!attempt) {
-                this.logger.error(`[handleWebhook] Payment attempt not found for conversationId: ${payload.conversationId} or paymentId: ${result.providerPaymentId}`);
+                this.logger.error(
+                    `[handleWebhook] Payment attempt not found (conversationId: ${payload?.conversationId}, result.conversationId: ${result.conversationId}, paymentId: ${result.providerPaymentId})`,
+                );
                 throw new NotFoundException('Payment attempt not found');
             }
 

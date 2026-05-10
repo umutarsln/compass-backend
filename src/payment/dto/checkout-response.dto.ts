@@ -7,4 +7,9 @@ export class CheckoutResponseDto {
   token?: string;
   /** true ise tutar 0 (örn. %100 kupon), ödeme alınmadan sipariş ödendi kabul edildi; müşteri başarı sayfasına yönlendirilmeli */
   paymentNotRequired?: boolean;
+  /** QNBpay paySmart3D: form POST hedefi */
+  formAction?: string;
+  formMethod?: 'POST';
+  formFields?: Record<string, string>;
+  checkoutMode?: string;
 }
