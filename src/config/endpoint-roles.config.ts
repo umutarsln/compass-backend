@@ -171,6 +171,19 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'GET /payment-settings/admin': [Role.ADMIN], // Tam ayarlar (admin panel)
     'PATCH /payment-settings': [Role.ADMIN], // Sadece admin - Ödeme ayarlarını güncelle
 
+    // Hero Slide Endpoints
+    'GET /hero-slides': [], // Public - Ana sayfa hero görselleri
+    'GET /hero-slides/admin': [Role.ADMIN], // Admin panel hero görselleri
+    'POST /hero-slides': [Role.ADMIN], // Hero görseli oluştur
+    'PATCH /hero-slides/:id': [Role.ADMIN], // Hero görseli güncelle
+    'DELETE /hero-slides/:id': [Role.ADMIN], // Hero görseli sil
+
+    // Exchange rate (USD/TRY)
+    'GET /exchange-rate': [], // Public — efektif kur özeti
+    'GET /exchange-rate/admin': [Role.ADMIN],
+    'PATCH /exchange-rate/manual': [Role.ADMIN],
+    'POST /exchange-rate/refresh': [Role.ADMIN],
+
     // Order Endpoints
     'POST /orders': [], // Public - Guest ve authenticated kullanıcılar sipariş oluşturabilir
     'GET /orders/:id': [], // Public - Guest ve authenticated kullanıcılar siparişlerini görebilir (orderId veya orderNo ile)

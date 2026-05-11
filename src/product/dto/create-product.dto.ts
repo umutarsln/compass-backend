@@ -10,8 +10,9 @@ import {
   Min,
   Max,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProductType } from '../../common/enums/product-type.enum';
+import { PriceInputCurrency } from '../../common/enums/price-input-currency.enum';
 
 export class CreateProductDto {
   @ApiProperty({
@@ -95,6 +96,25 @@ export class CreateProductDto {
   @IsNumber()
   @Min(0)
   discountedPrice?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Temel fiyatın girildiği para birimi (TRY ise kur ile USD saklanır; USD ise doğrudan saklanır)',
+    enum: PriceInputCurrency,
+    default: PriceInputCurrency.TRY,
+  })
+  @IsOptional()
+  @IsEnum(PriceInputCurrency)
+  priceCurrency?: PriceInputCurrency;
+
+  @ApiPropertyOptional({
+    description:
+      'İndirimli fiyatın para birimi (belirtilmezse priceCurrency kullanılır)',
+    enum: PriceInputCurrency,
+  })
+  @IsOptional()
+  @IsEnum(PriceInputCurrency)
+  discountedPriceCurrency?: PriceInputCurrency;
 
   @ApiProperty({
     description: 'SEO başlık',

@@ -31,6 +31,9 @@ import { CreateVariantCombinationDto } from './dto/create-variant-combination.dt
 import { UpdateVariantCombinationDto } from './dto/update-variant-combination.dto';
 import { generateSlug } from '../common/utils/slug.util';
 import { CacheService } from '../cache/cache.service';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { PriceInputCurrency } from '../common/enums/price-input-currency.enum';
+import { tryAmountToUsdStorage } from '../common/utils/usd-try-display.util';
 
 @Injectable()
 export class ProductService {
@@ -58,7 +61,22 @@ export class ProductService {
     private stockService: StockService,
     private dataSource: DataSource,
     private readonly cacheService: CacheService,
+    private readonly exchangeRateService: ExchangeRateService,
   ) { }
+
+  /**
+   * Admin ürün / varyasyon fiyat girişini DB'de saklanan USD tutarına çevirir.
+   */
+  private async convertAdminAmountToUsd(
+    amount: number,
+    currency: PriceInputCurrency,
+  ): Promise<number> {
+    if (currency === PriceInputCurrency.USD) {
+      return Math.round(Number(amount) * 100) / 100;
+    }
+    const rate = await this.exchangeRateService.getEffectiveUsdTryRate();
+    return tryAmountToUsdStorage(amount, rate);
+  }
 
   /**
    * Ürün veya varyasyon verisi değişince mağaza listesi/detay önbelleğinin güncel kalması için önbelleği temizler.
@@ -225,9 +243,31 @@ export class ProductService {
       }
     }
 
+    const {
+      priceCurrency,
+      discountedPriceCurrency,
+      basePrice,
+      discountedPrice,
+      ...productPayload
+    } = createProductDto;
+
+    const baseUsd = await this.convertAdminAmountToUsd(
+      basePrice,
+      priceCurrency ?? PriceInputCurrency.TRY,
+    );
+    let discountedUsd: number | null = null;
+    if (discountedPrice !== undefined && discountedPrice !== null) {
+      discountedUsd = await this.convertAdminAmountToUsd(
+        discountedPrice,
+        discountedPriceCurrency ?? priceCurrency ?? PriceInputCurrency.TRY,
+      );
+    }
+
     // Ürün oluştur
     const product = this.productRepository.create({
-      ...createProductDto,
+      ...productPayload,
+      basePrice: baseUsd,
+      discountedPrice: discountedUsd,
       slug,
       createdById,
       categories,
@@ -359,14 +399,33 @@ export class ProductService {
     }
 
     // Diğer alanları güncelle
-    // discountedPrice'ı özel olarak işle - sadece açıkça gönderildiğinde güncelle
-    const { discountedPrice, categoryIds, tagIds, ...restUpdateData } = updateProductDto;
+    const {
+      discountedPrice,
+      categoryIds,
+      tagIds,
+      priceCurrency,
+      discountedPriceCurrency,
+      basePrice: incomingBasePrice,
+      ...restUpdateData
+    } = updateProductDto;
 
     Object.assign(product, restUpdateData);
 
-    // discountedPrice açıkça gönderildiyse (null dahil) güncelle
+    if (incomingBasePrice !== undefined) {
+      const ccy = priceCurrency ?? PriceInputCurrency.TRY;
+      product.basePrice = await this.convertAdminAmountToUsd(incomingBasePrice, ccy);
+    }
+
     if (discountedPrice !== undefined) {
-      product.discountedPrice = discountedPrice;
+      if (discountedPrice === null) {
+        product.discountedPrice = null;
+      } else {
+        const ccy =
+          discountedPriceCurrency ??
+          priceCurrency ??
+          PriceInputCurrency.TRY;
+        product.discountedPrice = await this.convertAdminAmountToUsd(discountedPrice, ccy);
+      }
     }
 
     const updated = await this.productRepository.save(product);
@@ -1299,10 +1358,21 @@ export class ProductService {
       throw new BadRequestException('Renk tipi varyasyonlar için renk kodu zorunludur');
     }
 
+    const {
+      priceDeltaCurrency,
+      priceDelta,
+      ...valuePayload
+    } = createVariantValueDto;
+
+    const deltaUsd = await this.convertAdminAmountToUsd(
+      Number(priceDelta ?? 0),
+      priceDeltaCurrency ?? PriceInputCurrency.TRY,
+    );
+
     const variantValue = this.variantValueRepository.create({
-      ...createVariantValueDto,
+      ...valuePayload,
       variantOptionId,
-      priceDelta: createVariantValueDto.priceDelta ?? 0,
+      priceDelta: deltaUsd,
       isActive: createVariantValueDto.isActive ?? true,
       displayOrder: createVariantValueDto.displayOrder ?? 0,
     });
@@ -1344,7 +1414,22 @@ export class ProductService {
       throw new BadRequestException('Renk tipi varyasyonlar için renk kodu zorunludur');
     }
 
-    Object.assign(variantValue, updateVariantValueDto);
+    const dto = { ...updateVariantValueDto };
+    delete (dto as Record<string, unknown>).priceDeltaCurrency;
+
+    let incomingDeltaUsd: number | undefined;
+    if (dto.priceDelta !== undefined) {
+      incomingDeltaUsd = await this.convertAdminAmountToUsd(
+        Number(dto.priceDelta),
+        updateVariantValueDto.priceDeltaCurrency ?? PriceInputCurrency.TRY,
+      );
+    }
+    delete (dto as Record<string, unknown>).priceDelta;
+
+    Object.assign(variantValue, dto);
+    if (incomingDeltaUsd !== undefined) {
+      variantValue.priceDelta = incomingDeltaUsd;
+    }
     return await this.variantValueRepository.save(variantValue);
   }
 

@@ -19,6 +19,8 @@ import { PersonalizationSnapshotService } from '../personalization/personalizati
 import { CouponService } from '../coupon/coupon.service';
 import { Coupon } from '../coupon/coupon.entity';
 import { addVat } from '../common/vat';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { usdAmountToDisplayTry } from '../common/utils/usd-try-display.util';
 
 export interface CartTotals {
     subtotal: number;
@@ -50,6 +52,7 @@ export class CartService {
         private personalizationPricing: CartPersonalizationPricingService,
         private personalizationSnapshot: PersonalizationSnapshotService,
         private couponService: CouponService,
+        private readonly exchangeRateService: ExchangeRateService,
     ) { }
 
     /**
@@ -67,18 +70,17 @@ export class CartService {
     }
 
     /**
-     * Calculate price snapshot for a product/variant
+     * Ürün + opsiyonel varyasyon için mağaza ile uyumlu TL snapshot üretir (DB USD tutarından).
      */
     private async calculatePriceSnapshot(
         product: Product,
         variantId?: string | null,
     ): Promise<{ basePrice: number; discountedPrice: number | null }> {
-        let basePrice = Number(product.basePrice);
-        let discountedPrice = product.discountedPrice
-            ? Number(product.discountedPrice)
-            : null;
+        const usdTryRate = await this.exchangeRateService.getEffectiveUsdTryRate();
+        let baseUsd = Number(product.basePrice);
+        let discountedUsd =
+            product.discountedPrice != null ? Number(product.discountedPrice) : null;
 
-        // If variant product, add price deltas
         if (product.type === ProductType.VARIANT && variantId) {
             const variant = await this.variantCombinationRepository.findOne({
                 where: { id: variantId },
@@ -87,19 +89,22 @@ export class CartService {
 
             if (variant) {
                 const priceDelta = this.calculateVariantPriceDelta(variant);
-                basePrice = basePrice + priceDelta;
-                if (discountedPrice !== null) {
-                    discountedPrice = discountedPrice + priceDelta;
+                baseUsd = baseUsd + priceDelta;
+                if (discountedUsd !== null && !isNaN(discountedUsd)) {
+                    discountedUsd = discountedUsd + priceDelta;
                 }
             }
         }
 
+        const baseTry = usdAmountToDisplayTry(Math.max(0, baseUsd), usdTryRate);
+        const discountedTry =
+            discountedUsd !== null && !isNaN(discountedUsd)
+                ? usdAmountToDisplayTry(Math.max(0, discountedUsd), usdTryRate)
+                : null;
+
         return {
-            basePrice: Math.max(0, Math.round(basePrice * 100) / 100),
-            discountedPrice:
-                discountedPrice !== null
-                    ? Math.max(0, Math.round(discountedPrice * 100) / 100)
-                    : null,
+            basePrice: baseTry,
+            discountedPrice: discountedTry,
         };
     }
 

@@ -23,6 +23,8 @@ import { DocsModule } from './docs/docs.module';
 import { PersonalizationModule } from './personalization/personalization.module';
 import { CacheModule } from './cache/cache.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { HeroSlideModule } from './hero/hero-slide.module';
+import { ExchangeRateModule } from './exchange-rate/exchange-rate.module';
 
 @Module({
   imports: [
@@ -65,6 +67,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
     PersonalizationModule,
     ScheduleModule.forRoot(),
     AnalyticsModule,
+    HeroSlideModule,
+    ExchangeRateModule,
   ],
   controllers: [AppController],
   providers: [AppService],

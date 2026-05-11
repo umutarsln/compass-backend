@@ -10,9 +10,10 @@ import { Stock } from '../stock/stock.entity';
 import { StoreService } from './store.service';
 import { StoreController } from './store.controller';
 import { PersonalizationModule } from '../personalization/personalization.module';
+import { ExchangeRateModule } from '../exchange-rate/exchange-rate.module';
 
 @Module({
-    imports: [
+  imports: [
         TypeOrmModule.forFeature([
             Product,
             VariantCombination,
@@ -23,6 +24,7 @@ import { PersonalizationModule } from '../personalization/personalization.module
             Stock,
         ]),
         PersonalizationModule,
+        ExchangeRateModule,
     ],
     controllers: [StoreController],
     providers: [StoreService],

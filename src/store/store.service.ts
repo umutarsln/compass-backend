@@ -18,6 +18,8 @@ import { StoreProductDetailResponseDto, StoreVariantOptionDto, StoreVariantCombi
 import { ProductType } from '../common/enums/product-type.enum';
 import { generateSlug } from '../common/utils/slug.util';
 import { PersonalizationService } from '../personalization/personalization.service';
+import { ExchangeRateService } from '../exchange-rate/exchange-rate.service';
+import { usdAmountToDisplayTry } from '../common/utils/usd-try-display.util';
 
 @Injectable()
 export class StoreService {
@@ -36,6 +38,7 @@ export class StoreService {
         @InjectRepository(Tag)
         private tagRepository: Repository<Tag>,
         private personalizationService: PersonalizationService,
+        private readonly exchangeRateService: ExchangeRateService,
         @Inject(CACHE_MANAGER) private cacheManager: Cache,
         private configService: ConfigService,
     ) { }
@@ -66,6 +69,8 @@ export class StoreService {
             return cached;
         }
 
+        const usdTryRate = await this.exchangeRateService.getEffectiveUsdTryRate();
+
         // Kategori slug'larını ID'lere çevir ve tüm parent/child ID'lerini topla
         let allCategoryIds: string[] = [];
         if (categorySlugs) {
@@ -90,7 +95,7 @@ export class StoreService {
             tagIds: tagIds.length > 0 ? tagIds.join(',') : undefined,
             minPrice: undefined, // Fiyat filtresini sonra uygulayacağız
             maxPrice: undefined,
-        });
+        }, usdTryRate);
 
         // Varyasyonlu ürünlerin kombinasyonlarını getir
         const variantProducts = await this.getVariantCombinations({
@@ -99,7 +104,7 @@ export class StoreService {
             tagIds: tagIds.length > 0 ? tagIds.join(',') : undefined,
             minPrice: undefined, // Fiyat filtresini sonra uygulayacağız
             maxPrice: undefined,
-        });
+        }, usdTryRate);
 
         // Tüm ürünleri birleştir (fiyatlar zaten hesaplanmış durumda)
         let allProducts = [...simpleProducts, ...variantProducts];
@@ -161,6 +166,9 @@ export class StoreService {
         if (cached) {
             return cached;
         }
+
+        const usdTryRate = await this.exchangeRateService.getEffectiveUsdTryRate();
+
         // UUID formatını kontrol et (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productId);
         let product: Product | null = null;
@@ -273,15 +281,17 @@ export class StoreService {
         // Basit ve paket (BUNDLE) ürün — liste ile aynı mantık; VARIANT değilse burada biter
         if (product.type === ProductType.SIMPLE || product.type === ProductType.BUNDLE) {
             const baseGallery = this.getProductGallery(product);
-            const price = this.calculatePrice(product);
+            const price = this.calculatePrice(product, usdTryRate);
             const result: StoreProductDetailResponseDto = {
                 productId: product.id,
                 name: product.name,
                 subtitle: product.subtitle,
                 slug: product.slug,
                 description: product.description,
-                basePrice: Number(product.basePrice),
-                discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
+                basePrice: usdAmountToDisplayTry(Number(product.basePrice), usdTryRate),
+                discountedPrice: product.discountedPrice
+                    ? usdAmountToDisplayTry(Number(product.discountedPrice), usdTryRate)
+                    : null,
                 type: product.type === ProductType.BUNDLE ? ('BUNDLE' as const) : ('SIMPLE' as const),
                 gallery: baseGallery,
                 categories: (product.categories || []).map((cat) => ({
@@ -359,7 +369,7 @@ export class StoreService {
                     id: value.id,
                     value: value.value,
                     colorCode: value.colorCode,
-                    priceDelta: Number(value.priceDelta),
+                    priceDelta: usdAmountToDisplayTry(Number(value.priceDelta), usdTryRate),
                     isActive: value.isActive,
                     displayOrder: value.displayOrder,
                 })),
@@ -367,17 +377,14 @@ export class StoreService {
 
         // Kombinasyonları map et
         const mappedCombinations: StoreVariantCombinationDto[] = combinations.map((combination) => {
-            const price = this.calculateVariantPrice(product, combination);
+            const price = this.calculateVariantPrice(product, combination, usdTryRate);
             const gallery = this.getVariantCombinationGallery(combination, product);
 
-            // priceDelta'ları hesapla
             const totalPriceDelta = this.calculateVariantPriceDelta(combination);
 
-            // basePrice'a priceDelta'ları ekle
-            const basePriceWithDelta = Number(product.basePrice) + totalPriceDelta;
+            const baseUsdWithDelta = Number(product.basePrice) + totalPriceDelta;
 
-            // discountedPrice'a da priceDelta'ları ekle (varsa)
-            const discountedPriceWithDelta = product.discountedPrice
+            const discountedUsdWithDelta = product.discountedPrice
                 ? Number(product.discountedPrice) + totalPriceDelta
                 : null;
 
@@ -388,8 +395,11 @@ export class StoreService {
                 isActive: combination.isActive,
                 isDisabled: combination.isDisabled,
                 price,
-                basePrice: Math.round(basePriceWithDelta * 100) / 100,
-                discountedPrice: discountedPriceWithDelta ? Math.round(discountedPriceWithDelta * 100) / 100 : null,
+                basePrice: usdAmountToDisplayTry(Math.max(0, baseUsdWithDelta), usdTryRate),
+                discountedPrice:
+                    discountedUsdWithDelta !== null
+                        ? usdAmountToDisplayTry(Math.max(0, discountedUsdWithDelta), usdTryRate)
+                        : null,
                 stock: {
                     availableQuantity: combination.stock?.availableQuantity || 0,
                     reservedQuantity: combination.stock?.reservedQuantity || 0,
@@ -454,8 +464,10 @@ export class StoreService {
             subtitle: product.subtitle,
             slug: product.slug,
             description: product.description,
-            basePrice: Number(product.basePrice),
-            discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
+            basePrice: usdAmountToDisplayTry(Number(product.basePrice), usdTryRate),
+            discountedPrice: product.discountedPrice
+                ? usdAmountToDisplayTry(Number(product.discountedPrice), usdTryRate)
+                : null,
             type: 'VARIANT' as const,
             gallery: displayGallery,
             categories: (product.categories || []).map((cat) => ({
@@ -611,7 +623,7 @@ export class StoreService {
         orderBy?: StoreProductOrderBy;
         page?: number;
         limit?: number;
-    }): Promise<StoreProductDto[]> {
+    }, usdTryRate: number): Promise<StoreProductDto[]> {
         const { search, categoryIds, tagIds } = params;
 
         const qb = this.productRepository
@@ -652,7 +664,7 @@ export class StoreService {
         }
 
         const products = await qb.getMany();
-        return products.map((product) => this.mapSimpleProductToStoreProduct(product));
+        return products.map((product) => this.mapSimpleProductToStoreProduct(product, usdTryRate));
     }
 
     /**
@@ -668,7 +680,7 @@ export class StoreService {
         orderBy?: StoreProductOrderBy;
         page?: number;
         limit?: number;
-    }): Promise<StoreProductDto[]> {
+    }, usdTryRate: number): Promise<StoreProductDto[]> {
         const { search, categoryIds, tagIds } = params;
 
         const qb = this.variantCombinationRepository
@@ -716,14 +728,14 @@ export class StoreService {
         }
 
         const combinations = await qb.getMany();
-        return combinations.map((combination) => this.mapVariantCombinationToStoreProduct(combination));
+        return combinations.map((combination) => this.mapVariantCombinationToStoreProduct(combination, usdTryRate));
     }
 
     /**
      * Basit ürünü StoreProductDto'ya map et
      */
-    private mapSimpleProductToStoreProduct(product: Product): StoreProductDto {
-        const price = this.calculatePrice(product);
+    private mapSimpleProductToStoreProduct(product: Product, usdTryRate: number): StoreProductDto {
+        const price = this.calculatePrice(product, usdTryRate);
         const gallery = this.getProductGallery(product);
 
         return {
@@ -735,8 +747,10 @@ export class StoreService {
             slug: product.slug,
             description: product.description,
             price,
-            basePrice: Number(product.basePrice),
-            discountedPrice: product.discountedPrice ? Number(product.discountedPrice) : null,
+            basePrice: usdAmountToDisplayTry(Number(product.basePrice), usdTryRate),
+            discountedPrice: product.discountedPrice
+                ? usdAmountToDisplayTry(Number(product.discountedPrice), usdTryRate)
+                : null,
             sku: product.sku,
             stock: {
                 availableQuantity: product.stock?.availableQuantity || 0,
@@ -770,19 +784,16 @@ export class StoreService {
     /**
      * Varyasyon kombinasyonunu StoreProductDto'ya map et
      */
-    private mapVariantCombinationToStoreProduct(combination: VariantCombination): StoreProductDto {
+    private mapVariantCombinationToStoreProduct(combination: VariantCombination, usdTryRate: number): StoreProductDto {
         const product = combination.product;
-        const price = this.calculateVariantPrice(product, combination);
+        const price = this.calculateVariantPrice(product, combination, usdTryRate);
         const gallery = this.getVariantCombinationGallery(combination, product);
 
-        // priceDelta'ları hesapla
         const totalPriceDelta = this.calculateVariantPriceDelta(combination);
 
-        // basePrice'a priceDelta'ları ekle
-        const basePriceWithDelta = Number(product.basePrice) + totalPriceDelta;
+        const baseUsdWithDelta = Number(product.basePrice) + totalPriceDelta;
 
-        // discountedPrice'a da priceDelta'ları ekle (varsa)
-        const discountedPriceWithDelta = product.discountedPrice
+        const discountedUsdWithDelta = product.discountedPrice
             ? Number(product.discountedPrice) + totalPriceDelta
             : null;
 
@@ -802,8 +813,11 @@ export class StoreService {
             slug: combinationSlug || `${product.slug}-${combination.id.substring(0, 8)}`, // Fallback sadece hata durumunda
             description: product.description,
             price,
-            basePrice: Math.round(basePriceWithDelta * 100) / 100,
-            discountedPrice: discountedPriceWithDelta ? Math.round(discountedPriceWithDelta * 100) / 100 : null,
+            basePrice: usdAmountToDisplayTry(Math.max(0, baseUsdWithDelta), usdTryRate),
+            discountedPrice:
+                discountedUsdWithDelta !== null
+                    ? usdAmountToDisplayTry(Math.max(0, discountedUsdWithDelta), usdTryRate)
+                    : null,
             sku: combination.sku || product.sku,
             stock: {
                 availableQuantity: combination.stock?.availableQuantity || 0,
@@ -842,26 +856,24 @@ export class StoreService {
     }
 
     /**
-     * Basit ürün fiyatını hesapla
-     * Eğer discountedPrice varsa onu kullan, yoksa basePrice'ı kullan
+     * Basit ürün nihai fiyatını TL gösterimine çevirir (DB tutarı USD + indirim mantığı).
      */
-    private calculatePrice(product: Product): number {
-        // Eğer discountedPrice varsa onu kullan
+    private calculatePrice(product: Product, usdTryRate: number): number {
+        let usd = Number(product.basePrice);
+
         if (product.discountedPrice != null) {
-            const discountedPrice = Number(product.discountedPrice);
-            if (!isNaN(discountedPrice) && discountedPrice >= 0) {
-                return Math.round(discountedPrice * 100) / 100;
+            const discountedUsd = Number(product.discountedPrice);
+            if (!isNaN(discountedUsd) && discountedUsd >= 0) {
+                usd = discountedUsd;
             }
         }
 
-        // discountedPrice yoksa basePrice'ı kullan
-        const basePrice = Number(product.basePrice);
-        if (isNaN(basePrice) || basePrice < 0) {
-            console.warn(`[StoreService] Invalid basePrice for product ${product.id}:`, product.basePrice);
+        if (isNaN(usd) || usd < 0) {
+            console.warn(`[StoreService] Invalid USD price for product ${product.id}:`, product.basePrice);
             return 0;
         }
 
-        return Math.round(basePrice * 100) / 100;
+        return usdAmountToDisplayTry(usd, usdTryRate);
     }
 
     /**
@@ -891,35 +903,32 @@ export class StoreService {
     }
 
     /**
-     * Varyasyon kombinasyonu fiyatını hesapla
-     * discountedPrice sadece basePrice için geçerlidir, priceDelta'lar her zaman basePrice üzerine eklenir
+     * Varyasyon kombinasyonu nihai fiyatını USD bileşeni hesaplayıp TL gösterim üretir.
      */
-    private calculateVariantPrice(product: Product, combination: VariantCombination): number {
-        // Base price'ı al
-        const basePrice = Number(product.basePrice);
-        if (isNaN(basePrice) || basePrice < 0) {
+    private calculateVariantPrice(
+        product: Product,
+        combination: VariantCombination,
+        usdTryRate: number,
+    ): number {
+        const basePriceUsd = Number(product.basePrice);
+        if (isNaN(basePriceUsd) || basePriceUsd < 0) {
             console.warn(`[StoreService] Invalid basePrice for product ${product.id}:`, product.basePrice);
             return 0;
         }
 
-        // priceDelta'ları hesapla
         const totalPriceDelta = this.calculateVariantPriceDelta(combination);
 
-        // Base price'a priceDelta'ları ekle
-        const basePriceWithDelta = basePrice + totalPriceDelta;
+        const baseWithDeltaUsd = basePriceUsd + totalPriceDelta;
 
-        // discountedPrice varsa onu kullan (sadece basePrice yerine), yoksa basePrice kullan
-        let baseOrDiscountedPrice = basePriceWithDelta;
+        let baseOrDiscountedUsd = baseWithDeltaUsd;
         if (product.discountedPrice != null) {
-            const discountedPrice = Number(product.discountedPrice);
-            if (!isNaN(discountedPrice) && discountedPrice >= 0) {
-                // discountedPrice'a da priceDelta'ları ekle
-                baseOrDiscountedPrice = discountedPrice + totalPriceDelta;
+            const discountedUsd = Number(product.discountedPrice);
+            if (!isNaN(discountedUsd) && discountedUsd >= 0) {
+                baseOrDiscountedUsd = discountedUsd + totalPriceDelta;
             }
         }
 
-        // Final fiyat: (discountedPrice + priceDelta) veya (basePrice + priceDelta)
-        return Math.max(0, Math.round(baseOrDiscountedPrice * 100) / 100);
+        return usdAmountToDisplayTry(Math.max(0, baseOrDiscountedUsd), usdTryRate);
     }
 
     /**

@@ -10,6 +10,7 @@ import { GuestCartGuard } from './guards/guest-cart.guard';
 import { UserCartGuard } from './guards/user-cart.guard';
 import { PersonalizationModule } from '../personalization/personalization.module';
 import { CouponModule } from '../coupon/coupon.module';
+import { ExchangeRateModule } from '../exchange-rate/exchange-rate.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { CouponModule } from '../coupon/coupon.module';
     ]),
     PersonalizationModule,
     CouponModule,
+    ExchangeRateModule,
   ],
   controllers: [CartController],
   providers: [CartService, GuestCartGuard, UserCartGuard],

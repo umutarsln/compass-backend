@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -10,13 +11,29 @@ import { Category } from './category.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { generateSlug } from '../common/utils/slug.util';
+import { CacheService } from '../cache/cache.service';
 
 @Injectable()
 export class CategoryService {
+  private readonly logger = new Logger(CategoryService.name);
+
   constructor(
     @InjectRepository(Category)
     private categoryRepository: Repository<Category>,
+    private readonly cacheService: CacheService,
   ) {}
+
+  /**
+   * Kategori değişikliklerinden sonra mağaza kategori/ürün önbelleğinin güncel kalması için cache'i temizler.
+   */
+  private async invalidateStoreCachesAfterCategoryChange(): Promise<void> {
+    try {
+      await this.cacheService.clearCache();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Mağaza önbelleği temizlenemedi: ${message}`);
+    }
+  }
 
   /**
    * Benzersiz slug oluşturur
@@ -57,7 +74,10 @@ export class CategoryService {
       slug,
     });
 
-    return await this.categoryRepository.save(category);
+    const savedCategory = await this.categoryRepository.save(category);
+    await this.invalidateStoreCachesAfterCategoryChange();
+
+    return savedCategory;
   }
 
   async findAll(): Promise<Category[]> {
@@ -158,7 +178,10 @@ export class CategoryService {
     // Diğer alanları güncelle
     Object.assign(category, updateCategoryDto);
 
-    return await this.categoryRepository.save(category);
+    const savedCategory = await this.categoryRepository.save(category);
+    await this.invalidateStoreCachesAfterCategoryChange();
+
+    return savedCategory;
   }
 
   /**
@@ -199,5 +222,6 @@ export class CategoryService {
     }
 
     await this.categoryRepository.remove(category);
+    await this.invalidateStoreCachesAfterCategoryChange();
   }
 }

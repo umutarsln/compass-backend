@@ -14,10 +14,12 @@ import { Upload } from '../upload/upload.entity';
 import { Stock } from '../stock/stock.entity';
 import { StockModule } from '../stock/stock.module';
 import { CacheModule } from '../cache/cache.module';
+import { ExchangeRateModule } from '../exchange-rate/exchange-rate.module';
 
 @Module({
   imports: [
     CacheModule,
+    ExchangeRateModule,
     TypeOrmModule.forFeature([
       Product,
       VariantOption,

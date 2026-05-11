@@ -1,5 +1,7 @@
-import { IsString, IsNumber, IsBoolean, IsInt, IsOptional, Min } from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsInt, IsOptional, Min, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PriceInputCurrency } from '../../common/enums/price-input-currency.enum';
+
 
 export class CreateVariantValueDto {
   @ApiProperty({ description: 'Varyasyon değeri', example: 'Kırmızı' })
@@ -22,6 +24,15 @@ export class CreateVariantValueDto {
   @IsOptional()
   @IsNumber()
   priceDelta?: number;
+
+  @ApiPropertyOptional({
+    description: 'priceDelta için giriş para birimi (varsayılan TRY)',
+    enum: PriceInputCurrency,
+    default: PriceInputCurrency.TRY,
+  })
+  @IsOptional()
+  @IsEnum(PriceInputCurrency)
+  priceDeltaCurrency?: PriceInputCurrency;
 
   @ApiPropertyOptional({ description: 'Aktif mi?', default: true })
   @IsOptional()

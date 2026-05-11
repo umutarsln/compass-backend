@@ -6,7 +6,7 @@
  *   npm run seed:admin
  *
  * Ortam değişkenleri (isteğe bağlı):
- *   ADMIN_SEED_EMAIL    — varsayılan: admin@compass.local
+ *   ADMIN_SEED_EMAIL    — varsayılan: admin@compassreklam.com
  *   ADMIN_SEED_PASSWORD — varsayılan: CompassAdmin123!  (üretimde mutlaka değiştir)
  *
  * DB bağlantısı .env içinden: DB_HOST, DB_PORT, DB_USERNAME, DB_PASSWORD, DB_DATABASE
@@ -99,7 +99,7 @@ async function main() {
   const fileEnv = loadEnvFile(path.join(rootDir, '.env'));
   const env = { ...fileEnv, ...process.env };
 
-  const email = env.ADMIN_SEED_EMAIL || 'admin@compass.local';
+  const email = env.ADMIN_SEED_EMAIL || 'admin@compassreklam.com';
   const plainPassword =
     env.ADMIN_SEED_PASSWORD || 'CompassAdmin123!';
 
