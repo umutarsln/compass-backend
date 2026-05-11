@@ -36,27 +36,36 @@ type DatabaseConnectionOptions = {
 };
 
 /**
- * DB_HOST ailesi yoksa Railway/Vercel tarzı DATABASE_PUBLIC_URL veya DATABASE_URL değerini kullanır.
+ * DB_HOST ailesi eksikse Railway/Vercel tarzı DATABASE_PUBLIC_URL veya DATABASE_URL değerini kullanır.
  * @param configService Uygulama ortam değişkenlerini sağlayan ConfigService örneği.
  * @returns TypeORM bağlantı ayarlarının host/port veya url kısmı.
  */
 function resolveDatabaseConnectionOptions(
   configService: ConfigService,
 ): DatabaseConnectionOptions {
-  const host = configService.get<string>('DB_HOST');
-  if (host) {
+  const host = configService.get<string>('DB_HOST')?.trim();
+  const username = configService.get<string>('DB_USERNAME')?.trim();
+  const database = configService.get<string>('DB_DATABASE')?.trim();
+
+  if (host && username && database) {
     return {
       host,
       port: Number(configService.get<string>('DB_PORT') || 5432),
-      username: configService.get<string>('DB_USERNAME'),
+      username,
       password: configService.get<string>('DB_PASSWORD'),
-      database: configService.get<string>('DB_DATABASE'),
+      database,
     };
   }
 
   const url =
-    configService.get<string>('DATABASE_PUBLIC_URL') ||
-    configService.get<string>('DATABASE_URL');
+    configService.get<string>('DATABASE_PUBLIC_URL')?.trim() ||
+    configService.get<string>('DATABASE_URL')?.trim();
+
+  if (!url) {
+    throw new Error(
+      'PostgreSQL bağlantı ayarı eksik: DB_HOST/DB_USERNAME/DB_DATABASE veya DATABASE_PUBLIC_URL tanımlanmalı.',
+    );
+  }
 
   return { url };
 }
