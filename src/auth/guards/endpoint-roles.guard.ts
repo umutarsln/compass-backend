@@ -25,6 +25,11 @@ export class EndpointRolesGuard extends AuthGuard('jwt') implements CanActivate 
       context.getClass(),
     ]);
     if (isPublic) {
+      try {
+        await super.canActivate(context);
+      } catch (error) {
+        // Public endpoint'lerde token opsiyoneldir; geçersiz veya eksik token erişimi engellemez.
+      }
       return true;
     }
 

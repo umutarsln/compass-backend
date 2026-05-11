@@ -177,6 +177,7 @@ export const ENDPOINT_ROLES: Record<string, Role[]> = {
     'GET /orders/me/orders': [Role.USER, Role.ADMIN], // Authenticated kullanıcılar kendi siparişlerini görebilir
     'GET /orders': [Role.ADMIN], // Sadece admin tüm siparişleri görebilir
     'PATCH /orders/:id/status': [Role.ADMIN], // Sadece admin sipariş durumunu güncelleyebilir
+    'DELETE /orders/:id': [Role.ADMIN], // Sadece admin siparişi görünümden kaldırabilir (soft delete)
 
     // Documentation Endpoints (Admin only)
     'GET /docs': [Role.ADMIN], // Documentation listesi

@@ -295,16 +295,36 @@ export class QnbpayProvider implements PaymentProvider {
       hash_key: hashKey,
     });
     const row = this.normalizeCheckRow(res.data);
+    const responseCode = res.status_code ?? row?.status_code;
     const txStatus = (row?.transaction_status || '').toLowerCase();
+    const statusDescription = row?.status_description || res.status_description;
+    const statusDescriptionSuccess = (statusDescription || '').toLowerCase() === 'success';
     const ok =
-      res.status_code === 100 &&
-      (txStatus === 'completed' || txStatus === 'success' || row?.transaction_status === 'Completed');
+      responseCode === 100 &&
+      (txStatus === 'completed' ||
+        txStatus === 'success' ||
+        row?.transaction_status === 'Completed' ||
+        (!txStatus && statusDescriptionSuccess));
+    if (ok && !txStatus && statusDescriptionSuccess) {
+      this.logger.log(
+        `[confirmByInvoiceId] QNBpay checkstatus transaction_status olmadan Success döndü; başarılı kabul edildi: invoice=${invoiceId}`,
+      );
+    }
+    if (!ok) {
+      this.logger.warn(
+        `[confirmByInvoiceId] QNBpay checkstatus başarısız: invoice=${invoiceId}, status_code=${responseCode ?? 'yok'}, transaction_status=${row?.transaction_status ?? 'yok'}, status_description=${statusDescription ?? 'yok'}`,
+      );
+    }
     const orderRef = row?.order_id != null ? String(row.order_id) : undefined;
     return {
       status: ok ? 'SUCCESS' : 'FAILURE',
       providerPaymentId: orderRef,
       paidPrice: row?.transaction_amount != null ? Number(row.transaction_amount) : undefined,
-      errorMessage: ok ? undefined : row?.status_description || 'İşlem tamamlanmadı',
+      errorMessage:
+        ok
+          ? undefined
+          : statusDescription ||
+            `İşlem tamamlanmadı (status_code=${responseCode ?? 'yok'}, transaction_status=${row?.transaction_status ?? 'yok'})`,
       raw: res,
     };
   }

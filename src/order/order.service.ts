@@ -344,7 +344,8 @@ export class OrderService {
       .leftJoinAndSelect('order.items', 'items')
       .leftJoinAndSelect('items.product', 'product')
       .leftJoinAndSelect('items.variant', 'variant')
-      .leftJoinAndSelect('order.user', 'user');
+      .leftJoinAndSelect('order.user', 'user')
+      .andWhere('order.deletedAt IS NULL');
 
     // Status filter
     if (status) {
@@ -413,6 +414,22 @@ export class OrderService {
     const updatedOrder = await this.orderRepository.save(order);
 
     return await this.mapToResponseDto(updatedOrder);
+  }
+
+  /**
+   * Admin görünümünden siparişi kaldırmak için siparişi soft delete olarak işaretler.
+   */
+  async softDeleteOrder(orderId: string): Promise<{ message: string }> {
+    const order = await this.orderRepository.findOne({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    await this.orderRepository.softDelete(orderId);
+    return { message: 'Sipariş görünümden kaldırıldı' };
   }
 
   /**

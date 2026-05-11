@@ -27,6 +27,7 @@ import { UpdateUploadDto } from './dto/update-upload.dto';
 import { Upload } from './upload.entity';
 import { Public } from '../common/decorators/public.decorator';
 import { UploadOwnerType } from '../common/enums/upload-owner-type.enum';
+import { Role } from '../common/enums/role.enum';
 
 @ApiTags('Uploads')
 @Controller('uploads')
@@ -351,15 +352,18 @@ export class UploadController {
     });
 
     // Yetki kontrolü: Guest upload'lar için ownerId kontrolü, authenticated kullanıcılar için createdById kontrolü
-    const user = req.user as { userId: string } | undefined;
+    const user = req.user as { userId: string; roles?: Role[] } | undefined;
     const guestId = Array.isArray(guestIdHeader) ? guestIdHeader[0] : guestIdHeader;
 
     // Authenticated kullanıcı kontrolü
     if (user) {
-      // Authenticated kullanıcı sadece kendi oluşturduğu dosyaları silebilir
-      if (upload.createdById !== user.userId) {
+      const isAdmin = user.roles?.includes(Role.ADMIN) ?? false;
+
+      // Admin tüm medya dosyalarını; diğer kullanıcılar sadece kendi oluşturduğu dosyaları silebilir.
+      if (!isAdmin && upload.createdById !== user.userId) {
         console.error('[UploadController] User does not own this file', {
           userId: user.userId,
+          userRoles: user.roles,
           fileCreatedById: upload.createdById,
         });
         throw new BadRequestException('Bu dosyayı silme yetkiniz yok');

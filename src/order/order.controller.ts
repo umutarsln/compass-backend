@@ -3,6 +3,7 @@ import {
     Post,
     Get,
     Patch,
+    Delete,
     Body,
     Param,
     Query,
@@ -106,5 +107,15 @@ export class OrderController {
         @Body() updateDto: UpdateOrderStatusDto,
     ): Promise<OrderResponseDto> {
         return this.orderService.updateOrderStatus(orderId, updateDto);
+    }
+
+    /**
+     * Soft delete order from admin list (admin only)
+     */
+    @Delete(':id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN)
+    async softDeleteOrder(@Param('id') orderId: string): Promise<{ message: string }> {
+        return this.orderService.softDeleteOrder(orderId);
     }
 }

@@ -34,6 +34,7 @@ export interface QnbpayCheckStatusRow {
 
 export interface QnbpayCheckStatusResponse {
   status_code?: number;
+  status_description?: string;
   data?: QnbpayCheckStatusRow | QnbpayCheckStatusRow[];
 }
 

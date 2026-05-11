@@ -639,6 +639,8 @@ export class ProductService {
       throw new NotFoundException('ProductGallery kaydedildi ancak yüklenemedi');
     }
 
+    await this.invalidateStoreCachesAfterProductChange();
+
     return galleryWithRelations;
   }
 
@@ -998,6 +1000,8 @@ export class ProductService {
     });
     console.log('[ProductService] updateProductGallery - END');
 
+    await this.invalidateStoreCachesAfterProductChange();
+
     return galleryWithRelations;
   }
 
@@ -1007,6 +1011,7 @@ export class ProductService {
   async removeProductGallery(id: string): Promise<void> {
     const productGallery = await this.findProductGallery(id);
     await this.productGalleryRepository.remove(productGallery);
+    await this.invalidateStoreCachesAfterProductChange();
   }
 
   /**
