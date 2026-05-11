@@ -26,6 +26,41 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { HeroSlideModule } from './hero/hero-slide.module';
 import { ExchangeRateModule } from './exchange-rate/exchange-rate.module';
 
+type DatabaseConnectionOptions = {
+  host?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  database?: string;
+  url?: string;
+};
+
+/**
+ * DB_HOST ailesi yoksa Railway/Vercel tarzı DATABASE_PUBLIC_URL veya DATABASE_URL değerini kullanır.
+ * @param configService Uygulama ortam değişkenlerini sağlayan ConfigService örneği.
+ * @returns TypeORM bağlantı ayarlarının host/port veya url kısmı.
+ */
+function resolveDatabaseConnectionOptions(
+  configService: ConfigService,
+): DatabaseConnectionOptions {
+  const host = configService.get<string>('DB_HOST');
+  if (host) {
+    return {
+      host,
+      port: Number(configService.get<string>('DB_PORT') || 5432),
+      username: configService.get<string>('DB_USERNAME'),
+      password: configService.get<string>('DB_PASSWORD'),
+      database: configService.get<string>('DB_DATABASE'),
+    };
+  }
+
+  const url =
+    configService.get<string>('DATABASE_PUBLIC_URL') ||
+    configService.get<string>('DATABASE_URL');
+
+  return { url };
+}
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -35,17 +70,18 @@ import { ExchangeRateModule } from './exchange-rate/exchange-rate.module';
     CacheModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get('DB_HOST'),
-        port: configService.get('DB_PORT'),
-        username: configService.get('DB_USERNAME'),
-        password: configService.get('DB_PASSWORD'),
-        database: configService.get('DB_DATABASE'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize:
-          configService.get<string>('DB_SYNCHRONIZE') !== 'false',
-      }),
+      useFactory: (configService: ConfigService) => {
+        const connectionOptions =
+          resolveDatabaseConnectionOptions(configService);
+
+        return {
+          type: 'postgres',
+          ...connectionOptions,
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize:
+            configService.get<string>('DB_SYNCHRONIZE') !== 'false',
+        };
+      },
       inject: [ConfigService],
     }),
     UserModule,
