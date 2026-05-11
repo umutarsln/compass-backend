@@ -3,8 +3,11 @@ import {
     NotFoundException,
     ConflictException,
     BadRequestException,
+    Logger,
+    OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './user.entity';
@@ -13,11 +16,64 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { Role } from '../common/enums/role.enum';
 
 @Injectable()
-export class UserService {
+export class UserService implements OnModuleInit {
+    private readonly logger = new Logger(UserService.name);
+
     constructor(
         @InjectRepository(User)
         private userRepository: Repository<User>,
+        private configService: ConfigService,
     ) { }
+
+    /**
+     * Uygulama açılışında .env ile tanımlanan admin hesabını hazırlar.
+     */
+    async onModuleInit(): Promise<void> {
+        await this.ensureSeedAdminFromEnv();
+    }
+
+    /**
+     * ADMIN_SEED_EMAIL ve ADMIN_SEED_PASSWORD varsa admin kullanıcısını oluşturur veya günceller.
+     */
+    private async ensureSeedAdminFromEnv(): Promise<void> {
+        const email = this.configService.get<string>('ADMIN_SEED_EMAIL')?.trim();
+        const password = this.configService.get<string>('ADMIN_SEED_PASSWORD');
+
+        if (!email || !password) {
+            return;
+        }
+
+        if (password.length < 6) {
+            this.logger.warn('ADMIN_SEED_PASSWORD en az 6 karakter olmalı; admin seed atlandı.');
+            return;
+        }
+
+        const firstname = this.configService.get<string>('ADMIN_SEED_FIRSTNAME')?.trim() || 'Yönetici';
+        const lastname = this.configService.get<string>('ADMIN_SEED_LASTNAME')?.trim() || 'Admin';
+        const passwordHash = await bcrypt.hash(password, 10);
+        const existingUser = await this.userRepository.findOne({ where: { email } });
+
+        if (existingUser) {
+            existingUser.firstname = firstname;
+            existingUser.lastname = lastname;
+            existingUser.password = passwordHash;
+            existingUser.roles = Array.from(new Set([...(existingUser.roles || []), Role.ADMIN]));
+            await this.userRepository.save(existingUser);
+            this.logger.log(`Env admin kullanıcısı güncellendi: ${email}`);
+            return;
+        }
+
+        const admin = this.userRepository.create({
+            firstname,
+            lastname,
+            email,
+            password: passwordHash,
+            phone: null,
+            roles: [Role.ADMIN],
+        });
+        await this.userRepository.save(admin);
+        this.logger.log(`Env admin kullanıcısı oluşturuldu: ${email}`);
+    }
 
     async create(createUserDto: CreateUserDto): Promise<User> {
         // Email kontrolü
