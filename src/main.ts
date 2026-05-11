@@ -15,6 +15,43 @@ function resolveListenPort(): { listenPort: number; portRaw: string | undefined 
   return { listenPort, portRaw };
 }
 
+/**
+ * CORS izin listesini sabit yerel/domain origin'leri ve CORS_ORIGINS env değeriyle üretir.
+ * @returns {string[]}
+ */
+function resolveCorsOrigins(): string[] {
+  const defaultOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
+    'http://localhost:3003',
+    'http://localhost:7600',
+    'http://localhost:7601',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    'http://127.0.0.1:3002',
+    'http://127.0.0.1:3003',
+    'http://127.0.0.1:7600',
+    'http://127.0.0.1:7601',
+    'https://compass.com.tr',
+    'http://compass.com.tr',
+    'https://admin.compass.com.tr',
+    'http://admin.compass.com.tr',
+    'https://www.compassreklam.com',
+    'https://compassreklam.com',
+    'https://www.ilevgroup.com',
+    'https://ilevgroup.com',
+    'https://compass-front-admin.vercel.app',
+  ];
+
+  const envOrigins = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set([...defaultOrigins, ...envOrigins]));
+}
+
 /** Nest uygulamasını ayağa kaldırır: CORS, validasyon, Swagger ve global guard. */
 async function bootstrap() {
   const { listenPort, portRaw } = resolveListenPort();
@@ -37,25 +74,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const reflector = app.get(Reflector);
 
-  // CORS: yerel Store 3000, Admin 3001; eski 7600/7601 + 127.0.0.1 eşdeğerleri
-  const corsOrigins = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
-    'http://localhost:3003',
-    'http://localhost:7600',
-    'http://localhost:7601',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-    'http://127.0.0.1:3002',
-    'http://127.0.0.1:3003',
-    'http://127.0.0.1:7600',
-    'http://127.0.0.1:7601',
-    'https://compass.com.tr',
-    'http://compass.com.tr',
-    'https://admin.compass.com.tr',
-    'http://admin.compass.com.tr',
-  ];
+  const corsOrigins = resolveCorsOrigins();
 
   app.enableCors({
     origin: corsOrigins,
