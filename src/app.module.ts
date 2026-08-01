@@ -36,7 +36,7 @@ type DatabaseConnectionOptions = {
 };
 
 /**
- * DB_HOST ailesi eksikse Railway/Vercel tarzı DATABASE_PUBLIC_URL veya DATABASE_URL değerini kullanır.
+ * DB_HOST ailesi eksikse Railway tarzı DATABASE_PUBLIC_URL veya DATABASE_URL değerini kullanır.
  * @param configService Uygulama ortam değişkenlerini sağlayan ConfigService örneği.
  * @returns TypeORM bağlantı ayarlarının host/port veya url kısmı.
  */

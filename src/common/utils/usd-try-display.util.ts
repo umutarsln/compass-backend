@@ -1,12 +1,12 @@
 /**
- * Saklanan USD tutarını müşteri gösterimi için TL'ye çevirir (100'lük dilime yukarı yuvarlar).
+ * Saklanan USD tutarını müşteri gösterimi için tam TL değerine çevirir.
  */
 export function usdAmountToDisplayTry(
   usdAmount: number,
   usdTryRate: number,
 ): number {
   const tl = Number(usdAmount) * Number(usdTryRate);
-  return Math.ceil(tl / 100) * 100;
+  return Math.round(tl);
 }
 
 /**

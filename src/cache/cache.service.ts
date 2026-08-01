@@ -4,6 +4,7 @@ import { Inject } from '@nestjs/common';
 import type { Cache } from 'cache-manager';
 import { ConfigService } from '@nestjs/config';
 import { createClient, type RedisClientType } from 'redis';
+import { resolveRedisConnectionOptions } from '../config/resolve-redis-options';
 
 @Injectable()
 export class CacheService implements OnModuleInit {
@@ -46,10 +47,12 @@ export class CacheService implements OnModuleInit {
      * Redis bağlantısını kısa sürede dener; yoksa uyarı verir ve HTTP’nin ayağa kalkmasını engellemez.
      */
     private async checkRedisConnection(): Promise<void> {
-        const redisHost = this.configService.get<string>('REDIS_HOST');
-        const redisPort = this.configService.get<number>('REDIS_PORT');
-        const redisPassword = this.configService.get<string>('REDIS_PASSWORD');
-        const redisDb = this.configService.get<number>('REDIS_DB');
+        const {
+            host: redisHost,
+            port: redisPort,
+            password: redisPassword,
+            db: redisDb,
+        } = resolveRedisConnectionOptions(this.configService);
 
         this.logger.log(
             `[CacheService] Redis kontrolü: ${redisHost}:${redisPort}, DB: ${redisDb ?? 0}`,

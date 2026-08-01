@@ -2,6 +2,7 @@ import { Module, Logger } from '@nestjs/common';
 import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as redisStore from 'cache-manager-redis-store';
+import { resolveRedisConnectionOptions } from '../config/resolve-redis-options';
 import { CacheService } from './cache.service';
 import { CacheController } from './cache.controller';
 
@@ -12,10 +13,12 @@ import { CacheController } from './cache.controller';
             imports: [ConfigModule],
             useFactory: async (configService: ConfigService) => {
                 const logger = new Logger('CacheModule');
-                const redisHost = configService.get<string>('REDIS_HOST');
-                const redisPort = configService.get<number>('REDIS_PORT');
-                const redisPassword = configService.get<string>('REDIS_PASSWORD');
-                const redisDb = configService.get<number>('REDIS_DB');
+                const {
+                    host: redisHost,
+                    port: redisPort,
+                    password: redisPassword,
+                    db: redisDb,
+                } = resolveRedisConnectionOptions(configService);
 
                 logger.log(`[CacheModule] Redis yapılandırması: ${redisHost}:${redisPort}, DB: ${redisDb}`);
                 if (redisPassword) {
