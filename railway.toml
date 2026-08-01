@@ -3,7 +3,8 @@
 
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm ci && npm run build"
+# Nixpacks zaten npm ci çalıştırır; tekrar npm ci EBUSY (node_modules/.cache) hatasına yol açar.
+buildCommand = "npm run build"
 
 [deploy]
 startCommand = "npm run start:prod"
