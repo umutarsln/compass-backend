@@ -1,76 +1,23 @@
-import { Module, Logger } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import * as redisStore from 'cache-manager-redis-store';
-import { resolveRedisConnectionOptions } from '../config/resolve-redis-options';
+import { createCacheModuleOptions } from './create-cache-module-options';
 import { CacheService } from './cache.service';
 import { CacheController } from './cache.controller';
 
-/** Global cache (Redis store); Redis yoksa bağlantı denemesi kısa sürede kesilir. */
+/** Global cache; Redis yoksa bellek içi store ile bootstrap bloklanmaz. */
 @Module({
-    imports: [
-        NestCacheModule.registerAsync({
-            imports: [ConfigModule],
-            useFactory: async (configService: ConfigService) => {
-                const logger = new Logger('CacheModule');
-                const {
-                    host: redisHost,
-                    port: redisPort,
-                    password: redisPassword,
-                    db: redisDb,
-                } = resolveRedisConnectionOptions(configService);
-
-                logger.log(`[CacheModule] Redis yapılandırması: ${redisHost}:${redisPort}, DB: ${redisDb}`);
-                if (redisPassword) {
-                    logger.log('[CacheModule] Redis şifresi ayarlanmış');
-                } else {
-                    logger.log('[CacheModule] Redis şifresi yok (public)');
-                }
-
-                // cache-manager-redis-store yapılandırması
-                const config: any = {
-                    store: redisStore,
-                    host: redisHost,
-                    port: redisPort,
-                    db: redisDb,
-                    ttl: 3600, // 1 saat (saniye cinsinden)
-                    max: 1000, // Maksimum cache item sayısı
-                };
-
-                // Şifre varsa auth_pass olarak ekle (cache-manager-redis-store için)
-                if (redisPassword) {
-                    config.auth_pass = redisPassword;
-                }
-
-                // Redis yoksa log spam'i ve sonsuz denemeyi kes: undefined = yeniden deneme yok
-                config.retry_strategy = (options: any) => {
-                    if (options.error && options.error.code === 'ECONNREFUSED') {
-                        logger.warn(
-                            `[CacheModule] Redis erişilemiyor (${redisHost}:${redisPort}). Cache store bağlanamadı; HTTP API çalışmaya devam eder.`,
-                        );
-                        return undefined;
-                    }
-                    if (options.total_retry_time > 1000 * 60 * 60) {
-                        logger.error('[CacheModule] Redis bağlantı denemeleri 1 saatten fazla sürdü');
-                        return undefined;
-                    }
-                    if (options.attempt > 10) {
-                        logger.warn('[CacheModule] Redis deneme sınırı; yeniden bağlanma durduruldu.');
-                        return undefined;
-                    }
-                    return Math.min(options.attempt * 100, 3000);
-                };
-
-                logger.log(`[CacheModule] Redis store yapılandırması hazır: ${redisHost}:${redisPort}, DB: ${redisDb}`);
-
-                return config;
-            },
-            inject: [ConfigService],
-            isGlobal: true, // Global olarak kullanılabilir
-        }),
-    ],
-    controllers: [CacheController],
-    providers: [CacheService],
-    exports: [NestCacheModule, CacheService],
+  imports: [
+    NestCacheModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) =>
+        createCacheModuleOptions(configService),
+      inject: [ConfigService],
+      isGlobal: true,
+    }),
+  ],
+  controllers: [CacheController],
+  providers: [CacheService],
+  exports: [NestCacheModule, CacheService],
 })
-export class CacheModule { }
+export class CacheModule {}

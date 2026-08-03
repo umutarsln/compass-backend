@@ -3,8 +3,9 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject } from '@nestjs/common';
 import type { Cache } from 'cache-manager';
 import { ConfigService } from '@nestjs/config';
-import { createClient, type RedisClientType } from 'redis';
 import { resolveRedisConnectionOptions } from '../config/resolve-redis-options';
+
+type RedisClientType = import('redis').RedisClientType;
 
 @Injectable()
 export class CacheService implements OnModuleInit {
@@ -60,6 +61,7 @@ export class CacheService implements OnModuleInit {
 
         let testClient: RedisClientType | null = null;
         const connectTimeoutMs = 5000;
+        const { createClient } = await import('redis');
 
         try {
             testClient = createClient({
