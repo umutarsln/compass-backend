@@ -5,6 +5,7 @@ import { Upload } from '../upload/upload.entity';
 import { CreateHeroSlideDto } from './dto/create-hero-slide.dto';
 import { UpdateHeroSlideDto } from './dto/update-hero-slide.dto';
 import { HeroSlide } from './hero-slide.entity';
+import { filterPublicHeroSlides } from './hero-slide.utils';
 
 @Injectable()
 export class HeroSlideService {
@@ -17,10 +18,11 @@ export class HeroSlideService {
 
   /** Mağazada gösterilecek aktif hero slaytlarını sıralı olarak döndürür. */
   async findPublic(): Promise<HeroSlide[]> {
-    return await this.heroSlideRepository.find({
+    const slides = await this.heroSlideRepository.find({
       where: { isActive: true },
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
+    return filterPublicHeroSlides(slides);
   }
 
   /** Admin paneli için tüm hero slaytlarını görsel ilişkisiyle birlikte listeler. */
