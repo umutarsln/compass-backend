@@ -20,6 +20,10 @@ export class CacheService implements OnModuleInit {
      * Açılışta Redis’i dener; başarısız olsa bile Nest bootstrap tamamlanır (HTTP dinler).
      */
     async onModuleInit() {
+        if (this.configService.get<string>('CACHE_STORE') === 'memory') {
+            this.logger.log('[CacheService] CACHE_STORE=memory — Redis kontrolü atlandı.');
+            return;
+        }
         await this.checkRedisConnection();
     }
 

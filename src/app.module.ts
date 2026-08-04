@@ -89,6 +89,9 @@ function resolveDatabaseConnectionOptions(
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize:
             configService.get<string>('DB_SYNCHRONIZE') !== 'false',
+          extra: {
+            connectionTimeoutMillis: 15_000,
+          },
         };
       },
       inject: [ConfigService],

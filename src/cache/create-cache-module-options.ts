@@ -62,6 +62,15 @@ export async function createCacheModuleOptions(
   configService: ConfigService,
 ): Promise<CacheModuleOptions> {
   const logger = new Logger('CacheModule');
+
+  if (configService.get<string>('CACHE_STORE') === 'memory') {
+    logger.log('[CacheModule] CACHE_STORE=memory — bellek içi cache kullanılıyor.');
+    return {
+      ttl: 3600 * 1000,
+      max: 1000,
+    };
+  }
+
   const redisOptions = resolveRedisConnectionOptions(configService);
   const reachable = await isRedisReachable(redisOptions);
 
